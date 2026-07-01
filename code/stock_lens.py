@@ -188,11 +188,17 @@ def _add_indicators(group):
     group["ma50"] = group["close"].rolling(50).mean()
     group["rsi"] = ta.rsi(group["close"], length=14)
     group["vol_ratio"] = group["volume"] / group["volume"].rolling(20).mean()
+
+    # computing macd and assigning each output column directly by aligned index
     macd = ta.macd(group["close"], fast=12, slow=26, signal=9)
+    for col in macd.columns:
+        group[col] = macd[col].values
+
+    # computing bollinger bands and assigning each column directly by aligned index
     bb = ta.bbands(group["close"], length=20, std=2)
-    group = pd.concat([group.reset_index(drop=True),
-                       macd.reset_index(drop=True),
-                       bb.reset_index(drop=True)], axis=1)
+    for col in bb.columns:
+        group[col] = bb[col].values
+
     return group
 
 
@@ -236,7 +242,8 @@ def stage_2_features(prices=None, fundamentals=None, securities=None):
     prices[FUND_FILL_COLS] = prices.groupby("symbol")[FUND_FILL_COLS].ffill()
 
     # dropping warmup rows and remaining indicator nulls
-    prices = prices.groupby("symbol").apply(lambda x: x.iloc[50:]).reset_index(drop=True)
+    prices = prices.groupby("symbol", group_keys=False).apply(
+        lambda x: x.iloc[50:]).reset_index(drop=True)
     prices = prices.dropna(subset=["ma50", "rsi", "vol_ratio",
                                    "MACD_12_26_9", "BBU_20_2.0_2.0"])
     log(f"shape after cleanup: {prices.shape}")
