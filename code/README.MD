@@ -1,72 +1,82 @@
 # stock-lens — pipeline code
 
-Single-file pipeline for the stock-lens project. All logic lives in `stock_lens.py`
-as separate functions, one per stage. Every stage saves plots and printed
-observations to an `observations/` folder.
+NYSE stock direction classification, sequence models, out-of-sample
+evaluation, and a natural-language chatbot. Each file owns one
+responsibility; `main.py` routes stages from the command line.
+
+## File map
+
+| File | Responsibility |
+|---|---|
+| `config.py` | paths, constants, feature lists, thresholds |
+| `helpers.py` | logging, plot saving, section banners |
+| `data_loading.py` | stage 1 — download and inspect raw NYSE data |
+| `features.py` | stage 2 — indicators, fundamentals, labels, split |
+| `enhanced_features.py` | stage 2b — lags, returns, relative features, horizons |
+| `prep.py` | shared preprocessing + leak-safe held-out test evaluation |
+| `classification.py` | stage 3 — random forest and xgboost baselines |
+| `experiments.py` | stage 3b — strategy x horizon x granularity sweep |
+| `sequence_models.py` | stage 4 — LSTM/GRU/TCN/CNN/transformer + model saving |
+| `nlp_parser.py` | natural-language question parsing (ticker, date, model) |
+| `predictors.py` | loading saved models, predicting, formatting answers |
+| `chatbot.py` | stage 5 — NLP chatbot (CLI and Gradio) |
+| `oos_evaluation.py` | stage 6 — yfinance 2017-2025 regime evaluation |
+| `main.py` | command-line entry point |
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
-```
 
-Set Kaggle credentials (only needed the first time data is downloaded):
-
-```bash
 export KAGGLE_USERNAME=your_username
 export KAGGLE_KEY=your_key
+export STOCK_LENS_BASE=/workspace/stock-lens-data   # where data/models/plots live
+export ANTHROPIC_API_KEY=your_key                   # optional, adds LLM explanations
 ```
 
-## Choosing where data / models / plots live
-
-By default everything goes under `./stock-lens/`. Override with an env var:
-
-```bash
-export STOCK_LENS_BASE=/workspace/stock-lens     # e.g. on vast.ai
-```
-
-This creates:
+All outputs land under `$STOCK_LENS_BASE`:
 
 ```
-stock-lens/
-├── data/            # downloaded csvs + generated master/train/val/test
-├── models/          # saved model pickles
-└── observations/    # all plots (.png), results tables (.csv), run_log.txt
+stock-lens-data/
+├── data/            downloaded csvs + master/train/val/test
+├── models/          saved model files (.pkl, .pt)
+└── observations/    plots, results csvs, run_log.txt
 ```
 
 ## Running
 
-Run everything end to end:
+Stages depend on earlier outputs, so run in order the first time:
 
 ```bash
-python stock_lens.py --stage all
+python main.py --stage 1     # download + inspect (~2 min)
+python main.py --stage 2     # features + labels (~5 min)
+python main.py --stage 2b    # enhanced features (~5 min)
+python main.py --stage 3     # baselines, saves rf model (~15 min)
+python main.py --stage 3b    # full experiment sweep (long — optional)
+python main.py --stage 4     # sequence models, saves winner (GPU, ~30-60 min)
+python main.py --stage 6     # out-of-sample eval on yfinance 2017-2025
 ```
 
-Or run a single stage:
+## Chatbot
+
+Ask questions in plain English — mention a ticker or company name,
+optionally a date, optionally a model ("random forest" or "cnn"):
 
 ```bash
-python stock_lens.py --stage 1     # load + inspect raw data
-python stock_lens.py --stage 2     # indicators, fundamentals, labels, split
-python stock_lens.py --stage 2b    # lagged / return / relative features + horizons
-python stock_lens.py --stage 3     # baseline pooled next-day classification
-python stock_lens.py --stage 3b    # full experiment: 5 strategies x 3 horizons
+python main.py --stage 5 --chat-mode cli
+# you> Will Apple go up tomorrow?
+# you> predict MSFT on 2016-06-15 with random forest
+
+python main.py --stage 5 --chat-mode gradio   # web UI with share link
 ```
 
-Stages depend on earlier outputs (`master.csv`, `master_enhanced.csv`), so run
-in order the first time, or just use `--stage all`.
+Dataset covers 2010-2016, so "today"/"tomorrow" resolve to the latest
+available trading day. Setting `ANTHROPIC_API_KEY` adds a plain-English
+explanation to every answer; without it the chatbot still works.
 
-## Stage 3b — the experiment
+## Notes
 
-Stage 3b tests, for each of three prediction horizons (1-day, 5-day, 10-day):
-
-- **Pooled** — one model over all tickers, five strategies:
-  random forest, xgboost, logistic regression, stacked ensemble, one-vs-rest
-- **Per-sector** — one model per GICS sector, macro F1 averaged across sectors
-- **Per-stock** — one xgboost per ticker, macro F1 averaged across stocks
-
-It writes `observations/s3b_experiment_results.csv` plus comparison plots, and
-prints which configurations beat the next-day pooled xgboost baseline. Keep the
-strategies/horizons that improve results; drop the ones that don't.
-
-> Note: per-stock is ~1,500 model fits. Expect this to take a while — run it on
-> a strong machine (vast.ai), not free Colab.
+- Model selection always uses validation only; the test set is scored once.
+- `STOCK_LENS_OOS_TICKERS=100` limits stage 6 to the first N tickers.
+- Long stages survive disconnects with `nohup python main.py --stage 4 > run.log 2>&1 &`.
+- Outputs are educational only and are not financial advice.
