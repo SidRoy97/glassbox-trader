@@ -5,4 +5,8 @@ seaborn
 scikit-learn
 xgboost
 pandas_ta
-kaggle
+kaggle==1.6.17
+torch
+yfinance
+gradio
+anthropic
