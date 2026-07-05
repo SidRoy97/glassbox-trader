@@ -64,24 +64,43 @@ def latest_prices(tickers):
 
 
 def score_outcomes():
-    # writing actual market outcomes back onto unscored decisions
+    # scoring each decision against the first trading day after it was made
+    import pandas as pd
+    import yfinance as yf
     pending = get_unscored_decisions()
     if not pending:
         print("nothing to score")
         return
-    prices = latest_prices({d["ticker"] for d in pending})
     for d in pending:
-        p = prices.get(d["ticker"])
-        if not p or p["ret_1d"] is None:
-            continue
-        label = ("Up" if p["ret_1d"] > 0.01
-                 else "Down" if p["ret_1d"] < -0.01 else "Neutral")
-        correct = (d["action"] == "BUY" and label == "Up") or \
-                  (d["action"] == "SELL" and label == "Down") or \
-                  (d["action"] == "NO_TRADE" and label == "Neutral")
-        score_decision(d["id"], p["ret_1d"], p.get("ret_5d"), label, correct)
-        print(f"scored {d['ticker']} #{d['id']}: {label} "
-              f"({'correct' if correct else 'wrong'})")
+        try:
+            decided = pd.Timestamp(d["decided_at"]).tz_localize(None)
+            hist = yf.download(d["ticker"].replace(".", "-"), period="1mo",
+                               auto_adjust=True, progress=False)
+            closes = hist["Close"].squeeze()
+            closes.index = pd.to_datetime(closes.index).tz_localize(None)
+
+            # locating the last close at or before the decision moment
+            before = closes[closes.index <= decided]
+            after = closes[closes.index > decided]
+            if before.empty or after.empty:
+                print(f"skipping {d['ticker']} #{d['id']}: "
+                      f"next trading day not complete yet")
+                continue
+
+            base = float(before.iloc[-1])
+            ret_1d = float(after.iloc[0]) / base - 1
+            ret_5d = (float(after.iloc[4]) / base - 1) if len(after) > 4 else None
+
+            label = ("Up" if ret_1d > 0.01
+                     else "Down" if ret_1d < -0.01 else "Neutral")
+            correct = (d["action"] == "BUY" and label == "Up") or \
+                      (d["action"] == "SELL" and label == "Down") or \
+                      (d["action"] == "NO_TRADE" and label == "Neutral")
+            score_decision(d["id"], ret_1d, ret_5d, label, correct)
+            print(f"scored {d['ticker']} #{d['id']}: {label} "
+                  f"({'correct' if correct else 'wrong'})")
+        except Exception as e:
+            print(f"skipping {d['ticker']} #{d['id']}: {e}")
 
 
 def weekly_review():
