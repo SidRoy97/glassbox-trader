@@ -66,22 +66,27 @@ def insert_news(ticker, published_at, source, headline, summary, url,
         return None
 
 
-def get_recent_news(ticker, limit=5):
-    # fetching the most recent archived headlines for one ticker
+def get_recent_news(ticker, limit=5, days=7):
+    # fetching recent archived headlines bounded to a freshness window
+    from datetime import datetime, timedelta, timezone
     ticker = validate_ticker(ticker)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
     res = get_client().table("news_archive").select(
         "published_at,source,headline,summary").eq("ticker", ticker) \
+        .gte("published_at", cutoff) \
         .order("published_at", desc=True).limit(int(limit)).execute()
     return res.data or []
 
 
-def get_recent_decisions(ticker, limit=5):
-    # fetching the latest scored decisions for one ticker
+def get_recent_decisions(ticker, limit=5, days=30):
+    # fetching recent scored decisions bounded to a freshness window
+    from datetime import datetime, timedelta, timezone
     ticker = validate_ticker(ticker)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
     res = get_client().table("decisions").select(
         "decided_at,action,cnn_direction,outcome_label,was_correct") \
-        .eq("ticker", ticker).order("decided_at", desc=True) \
-        .limit(int(limit)).execute()
+        .eq("ticker", ticker).gte("decided_at", cutoff) \
+        .order("decided_at", desc=True).limit(int(limit)).execute()
     return res.data or []
 
 
