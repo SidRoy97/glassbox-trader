@@ -1,8 +1,5 @@
-data/
-models/
-outputs/
 __pycache__/
-.ipynb_checkpoints/
-*.pkl
-*.h5
+*.pyc
+stock-lens-data/data/*.csv
+!stock-lens-data/data/securities.csv
 .env
