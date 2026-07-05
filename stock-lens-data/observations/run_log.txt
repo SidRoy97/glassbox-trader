@@ -579,3 +579,4 @@ random forest loaded: True
 
 chat ready — ask naturally, e.g. 'Will Apple go up tomorrow?'
 type 'quit' to exit
+sequence model unavailable (No module named 'sequence_models')
