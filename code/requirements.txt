@@ -10,3 +10,5 @@ torch
 yfinance
 gradio
 anthropic
+fastapi
+uvicorn
