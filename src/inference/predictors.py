@@ -17,7 +17,7 @@ def load_seq_predictor():
         return None
     try:
         import torch
-        from sequence_models import make_torch_model
+        from pipeline.sequence_models import make_torch_model
         with open(meta_path, "rb") as f:
             meta = pickle.load(f)
         with open(os.path.join(MODEL_PATH, "seq_scaler.pkl"), "rb") as f:

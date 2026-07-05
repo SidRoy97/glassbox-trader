@@ -61,7 +61,7 @@ def plot_indicator_panel(df, ticker, filename):
 def stage_2_features():
     section("STAGE 2 — FEATURE ENGINEERING, LABELS, SPLIT")
     os.system("pip install pandas_ta -q")
-    from data_loading import stage_1_load
+    from pipeline.data_loading import stage_1_load
     prices, fundamentals, securities = stage_1_load()
 
     # merging sector info onto every price row

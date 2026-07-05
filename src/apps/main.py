@@ -14,28 +14,28 @@ def main():
 
     # importing lazily so each stage only loads what it needs
     if args.stage in ("1", "all"):
-        from data_loading import stage_1_load
+        from pipeline.data_loading import stage_1_load
         stage_1_load()
     if args.stage in ("2", "all"):
-        from features import stage_2_features
+        from pipeline.features import stage_2_features
         stage_2_features()
     if args.stage in ("2b", "all"):
-        from enhanced_features import stage_2b_enhanced
+        from pipeline.enhanced_features import stage_2b_enhanced
         stage_2b_enhanced()
     if args.stage in ("3", "all"):
-        from classification import stage_3_classify
+        from pipeline.classification import stage_3_classify
         stage_3_classify()
     if args.stage in ("3b", "all"):
-        from experiments import stage_3b_experiments
+        from pipeline.experiments import stage_3b_experiments
         stage_3b_experiments()
     if args.stage in ("4", "all"):
-        from sequence_models import stage_4_sequence
+        from pipeline.sequence_models import stage_4_sequence
         stage_4_sequence()
     if args.stage in ("6", "all"):
-        from oos_evaluation import stage_6_oos
+        from pipeline.oos_evaluation import stage_6_oos
         stage_6_oos()
     if args.stage == "5":
-        from chatbot import stage_5_chatbot
+        from apps.chatbot import stage_5_chatbot
         stage_5_chatbot(mode=args.chat_mode)
 
 
