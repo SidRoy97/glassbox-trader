@@ -1,7 +1,7 @@
 """managing long-horizon theses that daily decisions alone cannot hold"""
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from engine.llm_clients import ask, parse_json_reply
 from engine.memory import (get_client, get_recent_decisions, get_recent_news,
                            get_active_thesis, validate_ticker)
@@ -60,7 +60,7 @@ def review_theses(price_lookup):
         if adverse:
             get_client().table("theses").update(
                 {"status": "WEAKENING",
-                 "updated_at": "now()"}).eq("id", th["id"]).execute()
+                 "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", th["id"]).execute()
             continue
 
         # asking gemini to reassess against the freshest evidence
@@ -77,4 +77,4 @@ def review_theses(price_lookup):
             get_client().table("theses").update(
                 {"status": reply["status"],
                  "confidence": float(reply.get("confidence", th["confidence"])),
-                 "updated_at": "now()"}).eq("id", th["id"]).execute()
+                 "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", th["id"]).execute()
