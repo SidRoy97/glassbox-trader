@@ -6,8 +6,8 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
-from config import MODEL_PATH
-from helpers import log
+from core.config import MODEL_PATH
+from core.helpers import log
 
 
 def load_seq_predictor():

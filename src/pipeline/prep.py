@@ -3,8 +3,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from config import VAL_END, OBS_PATH
-from helpers import log, save_plot
+from core.config import VAL_END, OBS_PATH
+from core.helpers import log, save_plot
 
 
 def prep_xy(train, val, test, feature_cols, label_col):

@@ -4,8 +4,8 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from config import (DATA_PATH, FUND_FILL_COLS, TRAIN_END, VAL_END)
-from helpers import log, save_plot, section
+from core.config import (DATA_PATH, FUND_FILL_COLS, TRAIN_END, VAL_END)
+from core.helpers import log, save_plot, section
 
 
 def add_indicators(group):

@@ -3,3 +3,4 @@ __pycache__/
 stock-lens-data/data/*.csv
 !stock-lens-data/data/securities.csv
 .env
+.DS_Store

@@ -3,7 +3,7 @@
 import os
 import re
 import pandas as pd
-from config import DATA_PATH
+from core.config import DATA_PATH
 
 
 def load_ticker_names():

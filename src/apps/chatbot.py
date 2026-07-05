@@ -2,11 +2,11 @@
 
 import os
 import pandas as pd
-from config import DATA_PATH
-from helpers import log, section
-from predictors import (load_seq_predictor, load_rf_predictor,
+from core.config import DATA_PATH
+from core.helpers import log, section
+from inference.predictors import (load_seq_predictor, load_rf_predictor,
                         predict_one, format_answer)
-from nlp_parser import load_ticker_names, parse_query
+from inference.nlp_parser import load_ticker_names, parse_query
 
 
 def stage_5_chatbot(mode="cli"):

@@ -5,9 +5,9 @@ import pickle
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from config import DATA_PATH, MODEL_PATH, BASE_FEATURE_COLS, RANDOM_STATE
-from helpers import log, save_plot, section
-from prep import prep_xy
+from core.config import DATA_PATH, MODEL_PATH, BASE_FEATURE_COLS, RANDOM_STATE
+from core.helpers import log, save_plot, section
+from pipeline.prep import prep_xy
 
 
 def stage_3_classify():

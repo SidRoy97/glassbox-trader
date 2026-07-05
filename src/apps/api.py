@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import warnings
 from fastapi import FastAPI, HTTPException
-from predictors import load_seq_predictor, load_rf_predictor
-from live_features import build_live_frame, fill_missing_features
+from inference.predictors import load_seq_predictor, load_rf_predictor
+from inference.live_features import build_live_frame, fill_missing_features
 
 warnings.filterwarnings("ignore",
                         message="X does not have valid feature names")

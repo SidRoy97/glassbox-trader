@@ -3,9 +3,9 @@
 import os
 import numpy as np
 import pandas as pd
-from config import DATA_PATH, LAG_COLS, LAG_DAYS
-from features import add_indicators
-from enhanced_features import add_lags, add_returns
+from core.config import DATA_PATH, LAG_COLS, LAG_DAYS
+from pipeline.features import add_indicators
+from pipeline.enhanced_features import add_lags, add_returns
 
 # mapping GICS sectors to their SPDR sector ETF proxies
 SECTOR_ETF = {
