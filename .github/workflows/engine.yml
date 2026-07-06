@@ -18,7 +18,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
@@ -50,9 +50,6 @@ jobs:
 
       - name: run engine
         env:
-          DEBATE_BUDGET: ${{ vars.DEBATE_BUDGET }}
-          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
-          EXPLORE_SLOTS: ${{ vars.EXPLORE_SLOTS }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
@@ -61,18 +58,12 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-          PAPER_TRADING: ${{ vars.PAPER_TRADING }}
-          DEBATE_BUDGET: ${{ vars.DEBATE_BUDGET }}
-          DEBATE_COOLDOWN_DAYS: ${{ vars.DEBATE_COOLDOWN_DAYS }}
-          EXPLORE_SLOTS: ${{ vars.EXPLORE_SLOTS }}
-          BULL_PANEL: ${{ vars.BULL_PANEL }}
-          BEAR_PANEL: ${{ vars.BEAR_PANEL }}
-          JUDGE_PANEL: ${{ vars.JUDGE_PANEL }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
-          MISTRAL_MODEL: ${{ vars.MISTRAL_MODEL }}
-          TRADING_MODE: ${{ vars.TRADING_MODE }}
           LIVE_TRADING_CONFIRM: ${{ secrets.LIVE_TRADING_CONFIRM }}
+          PAPER_TRADING: ${{ vars.PAPER_TRADING }}
+          TRADING_MODE: ${{ vars.TRADING_MODE }}
+          DEBATE_BUDGET: ${{ vars.DEBATE_BUDGET }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          EXPLORE_SLOTS: ${{ vars.EXPLORE_SLOTS }}
           STOCK_LENS_BASE: ${{ github.workspace }}/stock-lens-data
           PYTHONPATH: ${{ github.workspace }}/src
         run: python -m engine.run_daily --mode "${{ steps.mode.outputs.mode }}"
