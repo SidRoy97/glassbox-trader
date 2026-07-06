@@ -321,6 +321,8 @@ def weekly_review():
     paper_report()
     distill_lessons()
     elect_champion()
+    from engine.retrain_trigger import maybe_trigger_retrain
+    maybe_trigger_retrain()
     write_weekly_report()
     if enabled():
         from engine.performance import sync_performance
