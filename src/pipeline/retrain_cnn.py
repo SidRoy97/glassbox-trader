@@ -249,6 +249,18 @@ def retrain(limit=None):
             shutil.copy2(src_path, os.path.join(archive, fn))
     log(f"old artifacts archived to {archive}")
 
+    # keeping the dethroned incumbent competing under its own label
+    if champion is not None:
+        prev_dir = os.path.join(
+            shadow_dir, f"{champion['meta'].get('kind', 'cnn1d')}_prev")
+        os.makedirs(prev_dir, exist_ok=True)
+        for fn in ("seq_model.pt", "seq_meta.pkl", "seq_scaler.pkl"):
+            src_path = os.path.join(MODEL_PATH, fn)
+            if os.path.exists(src_path):
+                shutil.copy2(src_path, os.path.join(prev_dir, fn))
+        log(f"dethroned incumbent stays in the tournament as "
+            f"{os.path.basename(prev_dir)}")
+
     # refitting the challenger on all pre-eval data for deployment
     deploy_scaler = StandardScaler().fit(fit_df[feature_cols])
     fit_scaled = fit_df.copy()

@@ -11,6 +11,7 @@ DOMINANCE_MARGIN = 0.07    # flagging any shadow clearly beating the champion
 DOMINANCE_MIN_N = 30       # requiring enough shadow evidence for dominance
 COOLDOWN_DAYS = 14         # spacing retrains so each model gets judged fairly
 WINDOW = 200               # judging over the most recent scored predictions
+PEER_MIN_N = 20            # requiring peer evidence for the anomaly guard
 
 
 def _last_trigger_days():
@@ -44,6 +45,14 @@ def retrain_signal():
     if champ_n < MIN_SCORED:
         return None
     if champ_rate < DECAY_THRESHOLD:
+        # holding when the whole roster decayed together — that is the
+        # market breaking, not the model, and retraining would chase it
+        peers = [r for m, (r, n) in rates.items()
+                 if m not in (champion, "ensemble") and n >= PEER_MIN_N]
+        if peers and max(peers) < DECAY_THRESHOLD:
+            print(f"retrain trigger: whole roster decayed (best peer "
+                  f"{max(peers):.0%}) — market anomaly, holding")
+            return None
         return (f"champion {champion} hit rate {champ_rate:.0%} over "
                 f"{champ_n} scored — decaying toward the random baseline")
     for m, (r, n) in rates.items():
