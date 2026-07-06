@@ -11,6 +11,8 @@ from engine.thesis import propose_thesis, review_theses
 from engine.screener import select_watchlist
 from engine.shadow import (record_predictions,
                            score_model_predictions, model_report)
+from engine.execution import (maybe_enter, maybe_exit,
+                              sync_positions_table, paper_report, enabled)
 from engine.memory import (insert_decision, get_unscored_decisions,
                            score_decision, upsert_market_context,
                            validate_ticker, save_screen_results,
@@ -36,6 +38,16 @@ def run_ticker(ticker):
     insert_decision(ticker, action, sig.get("direction", "unavailable"),
                     sig.get("confidence", 0.0), verdict["bull_case"],
                     verdict["bear_case"], verdict["judge_votes"], note)
+
+    # executing on paper only when the flag and keys are present
+    if enabled():
+        try:
+            if action == "BUY":
+                maybe_enter(ticker)
+            elif action == "SELL":
+                maybe_exit(ticker)
+        except Exception as e:
+            print(f"  [paper] {ticker} execution failed: {e}")
     return action
 
 
@@ -83,6 +95,11 @@ def run_daily():
         except Exception as e:
             print(f"{ticker} failed: {e}")
             results[ticker] = "ERROR"
+    if enabled():
+        try:
+            sync_positions_table()
+        except Exception as e:
+            print(f"[paper] position sync failed: {e}")
     print(f"\ndaily run complete: {results}")
 
 
@@ -173,6 +190,7 @@ def weekly_review():
     score_model_predictions()
     performance_report()
     model_report()
+    paper_report()
     tickers = get_recent_tickers(days=30) or WATCHLIST
     prices = latest_prices(tickers)
     review_theses(lambda t: (prices.get(t) or {}).get("ret_5d"))
