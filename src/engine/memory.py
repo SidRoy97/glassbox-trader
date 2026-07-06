@@ -127,6 +127,27 @@ def get_unscored_decisions(before_days=1):
     return res.data or []
 
 
+def save_screen_results(results, top_n=20):
+    # storing today's top screener rankings for the record and the site
+    from datetime import date
+    rows = [{"scan_date": str(date.today()),
+             "ticker": validate_ticker(r["ticker"]),
+             "direction": str(r["direction"])[:16],
+             "confidence": float(r["confidence"]),
+             "score": float(r["score"])} for r in results[:int(top_n)]]
+    if rows:
+        return get_client().table("screen_results").upsert(rows).execute()
+
+
+def get_recent_tickers(days=30):
+    # listing tickers that received decisions inside the freshness window
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
+    res = get_client().table("decisions").select("ticker") \
+        .gte("decided_at", cutoff).execute()
+    return sorted({r["ticker"] for r in (res.data or [])})
+
+
 def score_decision(decision_id, ret_1d, ret_5d, outcome_label, was_correct):
     # writing actual outcomes back onto one decision row
     row = {"outcome_return_1d": float(ret_1d) if ret_1d is not None else None,
@@ -136,3 +157,12 @@ def score_decision(decision_id, ret_1d, ret_5d, outcome_label, was_correct):
            "scored_at": datetime.now(timezone.utc).isoformat()}
     return get_client().table("decisions").update(row) \
         .eq("id", int(decision_id)).execute()
+
+
+def prune_news(years=5):
+    # deleting archived news older than the retention window
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc)
+              - timedelta(days=int(years * 365))).isoformat()
+    return get_client().table("news_archive").delete() \
+        .lt("published_at", cutoff).execute()
