@@ -12,9 +12,4 @@ gradio
 anthropic
 fastapi
 uvicorn
-supabase
-feedparser
-python-dotenv
-supabase
-feedparser
-python-dotenv
+vaderSentiment
