@@ -32,8 +32,8 @@ to counter momentum bias — so unremarkable-looking stocks still get their day 
 Roughly 30–40 unique names get debated per week.
 
 **3. The data packet — the only permitted evidence.** For each debated ticker, code assembles
-a sealed packet: the CNN signal (direction, confidence, RSI, 5/10-day returns, price vs 50-day
-MA, volume ratio, sector-relative strength), days until earnings, the 5 freshest headlines with
+a sealed packet: the elected champion's signal (direction, confidence, RSI, 5/10-day returns,
+price vs 50-day MA, volume ratio, sector-relative strength), days until earnings, the 5 freshest headlines with
 finance-aware sentiment scores, the last 5 decisions on this ticker **with their real outcomes**,
 the all-time scored record on this ticker, distilled lessons from past mistakes, any active
 long-horizon thesis, current open position (if held), and the market snapshot.
@@ -77,7 +77,7 @@ separately from real wrong calls — the track record page shows both, unedited.
 
 | Component | What it does |
 |---|---|
-| `src/pipeline/` | The ML pipeline: features (RSI, MACD, Bollinger, lags, sector-relative), sequence models, and `retrain_cnn.py` (5-year trailing retrain behind a champion/challenger gate) |
+| `src/pipeline/` | The ML pipeline: features (RSI, MACD, Bollinger, lags, sector-relative), sequence models, and `retrain_cnn.py` (5-year trailing retrain of the full roster — five sequence nets, Random Forest, XGBoost — class-weighted, each behind its own evidence gate) |
 | `src/inference/` | Live feature building from yfinance + model loading and prediction |
 | `src/engine/screener.py` | Full-universe batch CNN scan and interest ranking |
 | `src/engine/data_packet.py` | Assembles the sealed evidence packet |
@@ -93,7 +93,7 @@ separately from real wrong calls — the track record page shows both, unedited.
 | `web/` | Next.js 15 dark dashboard, 9 pages, deployed on Vercel |
 | `.github/workflows/` | `engine.yml` (three cron schedules) and `retrain.yml` (manual, commits winning models back) |
 
-**Data sources and what each contributes:** yfinance (prices — the CNN's food), Finnhub
+**Data sources and what each contributes:** yfinance (prices — the signal models' food), Finnhub
 (structured news + earnings calendar), Yahoo RSS (headlines), VADER + finance lexicon
 (sentiment), SPY/QQQ/VIX (regime), SPDR sector ETFs (relative strength), yfinance institutional
 holders (thesis evidence — positions are facts, opinions are noise), Alpaca (execution, account
@@ -127,10 +127,14 @@ truth, market calendar).
 - **LLM judge scoreboard:** every judge vote is stored beside its outcome, so each provider
   (Gemini, Llama, Mistral) gets a public accuracy ranking — BUY↔Up, SELL↔Down,
   NO_TRADE↔Neutral — charted on the Signals page.
-- **Quarterly:** the weekly report prints the CNN's live hit rate against the ~33% random
-  baseline. When it sags, the retrain workflow trains a challenger on a 5-year trailing window;
-  it deploys **only if it beats the champion** on untouched recent data. Old artifacts are
-  archived, never destroyed.
+- **Quarterly:** the weekly report prints the deployed champion's live hit rate against the
+  ~33% random baseline. When it sags, the retrain workflow retrains the **entire roster** —
+  five sequence architectures, Random Forest, and XGBoost — on a 5-year trailing window with
+  inverse-frequency class weighting (so the majority Neutral class cannot dominate training)
+  and AdamW regularization. Each model faces its own gate: the best sequence challenger
+  deploys only if it beats the incumbent on untouched recent data, and the retrained Random
+  Forest replaces the old one only if it wins its own mini-gate (with a repo size guard).
+  Old artifacts are archived, never destroyed.
 
 The LLMs' weights never change. All LLM-layer learning is prompt-level — auditable (every lesson
 is a readable sentence with cited evidence), reversible, and immune to the failure modes of
@@ -147,15 +151,17 @@ the CNN, with clean supervised labels — is exactly the one that gets it.
 | Bear panel | Mistral Small + Llama 3.3 70B | Mistral, Groq | `BEAR_PANEL`, `MISTRAL_MODEL` |
 | Judges | all three families | — | `JUDGE_PANEL` |
 | Thesis agent & lesson distiller | Gemini 2.5 Flash | Google | `GEMINI_MODEL` |
-| Signal engine | 1D-CNN (classification head) | trained in-repo | quarterly retrain |
+| Signal engine | elected champion (1D-CNN initially) | trained in-repo | weekly election + roster retrain |
 | Shadow challengers | Random Forest, XGBoost, LSTM, GRU, TCN, Transformer, ensemble | trained in-repo | RF electable weekly; sequence models promoted via retrain gate |
 
-The CNN was chosen empirically: a 20-configuration bake-off (LSTM, GRU, TCN, CNN, Transformer ×
-regression/classification heads) where classification beat regression 0.44–0.47 vs 0.15–0.39
-macro F1 and cnn1d won the held-out test at **0.4679** with balanced per-class scores. Tabular
-models (RF, XGBoost, ensembles — 33 configurations) ceilinged at ~0.39–0.41. Out-of-sample the
-CNN decays to ~0.35 from regime drift — which is exactly why retraining is built in and why the
-LLM layer exists: prices alone don't carry event information.
+cnn1d holds the initial title on empirical grounds: a 20-configuration bake-off (LSTM, GRU,
+TCN, CNN, Transformer × regression/classification heads) where classification beat regression
+0.44–0.47 vs 0.15–0.39 macro F1 and cnn1d won the held-out test at **0.4679** with balanced
+per-class scores; tabular models ceilinged at ~0.39–0.41 in the same study. But the title is
+not permanent: every retrain re-runs the whole roster on fresh 5-year data with class-weighted
+losses, and the weekly election can reseat the champion from live scored evidence. Out-of-sample
+all price-only models decay toward ~0.35 from regime drift — which is exactly why retraining is
+built in and why the LLM layer exists: prices alone don't carry event information.
 
 ---
 
@@ -180,7 +186,7 @@ executing for others is regulated investment-adviser territory.
 | Weekdays 12:30 | `daily` | holiday check → market snapshot → universe scan → top-10 debates → gate → paper orders → position & performance sync → stale-position management |
 | Weekdays 22:30 | `score` | decisions and shadow predictions graded against the completed session |
 | Saturday 14:00 | `weekly` | scoring sweep → performance report → model tournament → paper P&L → thesis review & proposals → lesson distillation → news pruning (5-year retention) → report row for the site |
-| Manual | `retrain` | 5-year trailing retrain of the **full architecture roster** (cnn1d, LSTM, GRU, TCN, Transformer + XGBoost); the best challenger deploys only if it beats the champion; every architecture is saved as a shadow competitor |
+| Manual | `retrain` | 5-year trailing, class-weighted retrain of the **full roster** (cnn1d, LSTM, GRU, TCN, Transformer, XGBoost, and Random Forest); the best sequence challenger deploys only if it beats the champion, the RF only if it wins its mini-gate; every architecture is saved as a shadow competitor |
 
 ---
 
@@ -234,9 +240,10 @@ budgets are all env-swappable, so provider limit changes are a variable edit, no
 
 ## Honest limitations (and what mitigates them)
 
-- The signal models' out-of-sample edge is thin (CNN ~0.35 macro F1 vs 0.33 random; the RF
-  ceilinged lower in testing). They are calibrated priors that discipline the debate, not
-  oracles. **Mitigations:** the drift monitor, the quarterly champion/challenger retrain, and
+- The signal models' out-of-sample edge is thin (~0.35 macro F1 vs 0.33 random for the
+  original CNN; every price-only model faces the same ceiling). They are calibrated priors
+  that discipline the debate, not oracles. **Mitigations:** the drift monitor, the full-roster
+  class-weighted retrain (all eight competitors refreshed, each behind its own gate), and
   the weekly election that always seats the best-performing model — but note honestly that
   comparison and election *select among* models; they do not raise any model's ceiling. The
   ceiling of the price-only family is the founding argument for the news-reading LLM layer
