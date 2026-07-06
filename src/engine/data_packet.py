@@ -81,8 +81,28 @@ def get_cnn_signal(ticker):
             "rel_to_sector": round(float(latest["rel_to_sector"]), 4)}
 
 
+def _structure_block(ticker):
+    # summarizing price structure as citable evidence on a guaranteed ohlc frame
+    try:
+        import pandas as pd
+        import yfinance as yf
+        from pipeline.ta_structure import technical_structure_block
+        hist = yf.download(ticker.replace(".", "-"), period="1y",
+                           auto_adjust=True, progress=False)
+        if hist is None or hist.empty or len(hist) < 60:
+            return None
+        # flattening the multiindex newer yfinance returns for single tickers
+        if isinstance(hist.columns, pd.MultiIndex):
+            hist.columns = hist.columns.get_level_values(0)
+        df = hist.rename(columns=str.lower)[["open", "high", "low", "close"]]
+        return technical_structure_block(df)
+    except Exception as e:
+        print(f"  [structure] {ticker} block unavailable: {e}")
+        return None
+
+
 def build_packet(ticker, news_items):
-    # combining signal, news, history, lessons, thesis, and context
+    # combining signal, structure, news, history, lessons, thesis, and context
     from engine.news_fetcher import fetch_next_earnings
     ticker = validate_ticker(ticker)
     sentiments = [n.get("sentiment") for n in news_items[:5]
@@ -90,6 +110,7 @@ def build_packet(ticker, news_items):
     packet = {
         "ticker": ticker,
         "cnn_signal": get_cnn_signal(ticker),
+        "technical_structure": _structure_block(ticker),
         "days_to_earnings": fetch_next_earnings(ticker),
         "news": [{"headline": n["headline"][:200],
                   "summary": (n.get("summary") or "")[:300],
@@ -110,5 +131,5 @@ def build_packet(ticker, news_items):
 def packet_to_text(packet):
     # serializing the packet as clearly delimited json for prompts
     return ("=== DATA PACKET (the only permitted evidence) ===\n"
-            + json.dumps(packet, indent=1, default=str)[:4500]
+            + json.dumps(packet, indent=1, default=str)[:5500]
             + "\n=== END DATA PACKET ===")

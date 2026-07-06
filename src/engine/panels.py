@@ -4,9 +4,10 @@ from engine.llm_clients import ask, parse_json_reply
 from engine.data_packet import packet_to_text
 
 GROUNDING = ("RULES: every claim must cite a field from the data packet by "
-             "name (e.g. cnn_signal.rsi, news[2].headline). claims citing "
-             "facts not in the packet will be struck. respond with ONLY the "
-             "json object, no prose before or after.")
+             "name (e.g. cnn_signal.rsi, technical_structure.adx, "
+             "news[2].headline). claims citing facts not in the packet will "
+             "be struck. respond with ONLY the json object, no prose before "
+             "or after.")
 
 CASE_SCHEMA = ["stance", "key_points", "confidence"]
 VOTE_SCHEMA = ["vote", "reason", "confidence"]
