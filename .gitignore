@@ -7,3 +7,4 @@ stock-lens-data/data/*.csv
 __pycache__/
 web/node_modules/
 web/.next/
+logs/
