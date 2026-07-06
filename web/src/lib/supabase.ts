@@ -57,3 +57,12 @@ export interface Trade {
   entry_price: number; exit_price: number;
   entry_at: string; exit_at: string; pnl: number; pnl_pct: number;
 }
+
+export interface WeeklyReport {
+  week_of: string;
+  stats: {
+    decisions: number; scored: number; correct: number; trades: number;
+    models: Record<string, { correct: number; scored: number }>;
+    new_lessons: string[]; equity?: number; last_equity?: number;
+  };
+}

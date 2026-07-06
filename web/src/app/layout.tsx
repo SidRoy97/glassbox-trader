@@ -14,6 +14,7 @@ const NAV = [
   ["/news", "News"],
   ["/track", "Track record"],
   ["/performance", "Performance"],
+  ["/reports", "Reports"],
   ["/insights", "Insights"],
   ["/positions", "Positions"],
 ];

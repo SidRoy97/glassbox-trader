@@ -11,9 +11,17 @@ GROUNDING = ("RULES: every claim must cite a field from the data packet by "
 CASE_SCHEMA = ["stance", "key_points", "confidence"]
 VOTE_SCHEMA = ["vote", "reason", "confidence"]
 
-BUY_PANEL = ["gemini", "groq"]
-SELL_PANEL = ["mistral", "groq"]
-JUDGE_PANEL = ["gemini", "groq", "mistral"]
+import os
+
+def _panel(env, default):
+    # reading panel membership from env so providers swap without code edits
+    names = os.environ.get(env, default).split(",")
+    return [n.strip() for n in names if n.strip() in
+            ("gemini", "groq", "mistral")] or default.split(",")
+
+BUY_PANEL = _panel("BULL_PANEL", "gemini,groq")
+SELL_PANEL = _panel("BEAR_PANEL", "mistral,groq")
+JUDGE_PANEL = _panel("JUDGE_PANEL", "gemini,groq,mistral")
 
 
 def _case_prompt(packet, stance):

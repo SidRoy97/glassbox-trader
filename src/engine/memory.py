@@ -174,3 +174,22 @@ def get_open_position(ticker):
     res = get_client().table("positions").select("qty,entry_price,entry_date") \
         .eq("ticker", ticker).eq("status", "OPEN").limit(1).execute()
     return res.data[0] if res.data else None
+
+
+def get_ticker_stats(ticker):
+    # summarising the all-time scored record for one ticker
+    ticker = validate_ticker(ticker)
+    res = get_client().table("decisions").select("was_correct") \
+        .eq("ticker", ticker).not_.is_("scored_at", "null").execute()
+    rows = res.data or []
+    if not rows:
+        return None
+    correct = sum(1 for r in rows if r["was_correct"])
+    return {"scored": len(rows), "correct": correct}
+
+
+def save_weekly_report(stats):
+    # storing one weekly report row for the site reporting tab
+    from datetime import date
+    return get_client().table("reports").upsert(
+        {"week_of": str(date.today()), "stats": stats}).execute()

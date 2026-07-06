@@ -14,6 +14,8 @@ RISK_PER_TRADE = 0.01        # risking one percent of equity per position
 STOP_ATR_MULT = 1.5          # placing the stop this many ATRs below entry
 REWARD_RISK = 2.0            # requiring two units of reward per unit of risk
 MAX_POSITION_FRACTION = 0.10  # capping any position at ten percent of equity
+MAX_DRAWDOWN_HALT = 0.10     # halting new entries past this peak-to-now drawdown
+MAX_HOLD_DAYS = 10           # closing stale positions unless a thesis backs them
 
 
 def enabled():
@@ -67,11 +69,24 @@ def compute_levels(ticker):
             "atr": round(atr, 2)}
 
 
+def in_drawdown_halt():
+    # refusing new risk when equity has fallen too far from its peak
+    res = get_client().table("portfolio_history").select("equity") \
+        .order("equity", desc=True).limit(1).execute().data
+    if not res:
+        return False
+    peak = float(res[0]["equity"])
+    current = float(get_account()["equity"])
+    return peak > 0 and (current / peak - 1) < -MAX_DRAWDOWN_HALT
+
+
 def maybe_enter(ticker):
     # opening a long bracket position sized to risk one percent of equity
     if not enabled():
         return "paper trading disabled"
     ticker = validate_ticker(ticker)
+    if in_drawdown_halt():
+        return f"{ticker}: drawdown halt active — no new entries"
 
     # skipping when a position already exists for this symbol
     if any(p["symbol"] == ticker.replace(".", "-") for p in get_positions()):
@@ -121,20 +136,52 @@ def maybe_exit(ticker):
 
 
 def sync_positions_table():
-    # mirroring live alpaca positions into supabase for the site
+    # mirroring live alpaca positions while preserving first-seen entry dates
     if not enabled():
         return
     live = get_positions()
     client = get_client()
+    existing = {r["ticker"]: r for r in
+                (client.table("positions").select("ticker,entry_date")
+                 .eq("status", "OPEN").execute().data or [])}
     client.table("positions").update({"status": "CLOSED"}) \
         .eq("status", "OPEN").execute()
     for p in live:
+        ticker = p["symbol"].replace("-", ".")
+        first_seen = (existing.get(ticker) or {}).get("entry_date") \
+            or datetime.now(timezone.utc).isoformat()
         client.table("positions").upsert({
-            "ticker": p["symbol"].replace("-", "."),
+            "ticker": ticker,
             "qty": float(p["qty"]),
             "entry_price": float(p["avg_entry_price"]),
-            "entry_date": datetime.now(timezone.utc).isoformat(),
+            "entry_date": first_seen,
             "status": "OPEN"}).execute()
+
+
+def manage_positions():
+    # closing positions past the hold limit unless a thesis backs them
+    if not enabled():
+        return
+    from engine.memory import get_active_thesis
+    rows = get_client().table("positions").select("ticker,entry_date") \
+        .eq("status", "OPEN").execute().data or []
+    now = datetime.now(timezone.utc)
+    for r in rows:
+        try:
+            age = (now - datetime.fromisoformat(
+                r["entry_date"].replace("Z", "+00:00"))).days
+        except Exception:
+            continue
+        if age <= MAX_HOLD_DAYS:
+            continue
+        thesis = get_active_thesis(r["ticker"])
+        if thesis and thesis["direction"] == "LONG":
+            print(f"  [paper] {r['ticker']}: {age}d old, "
+                  f"held on active thesis")
+            continue
+        print(f"  [paper] {r['ticker']}: {age}d exceeds "
+              f"{MAX_HOLD_DAYS}d limit — closing")
+        maybe_exit(r["ticker"])
 
 
 def paper_report():

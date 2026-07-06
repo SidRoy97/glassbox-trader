@@ -4,7 +4,7 @@ import json
 from engine.memory import (get_recent_news, get_recent_decisions,
                            get_active_lessons, get_active_thesis,
                            get_market_context, validate_ticker,
-                           get_open_position)
+                           get_open_position, get_ticker_stats)
 
 
 def get_cnn_signal(ticker):
@@ -62,6 +62,7 @@ def build_packet(ticker, news_items):
         "lessons": get_active_lessons(limit=8),
         "active_thesis": get_active_thesis(ticker),
         "open_position": get_open_position(ticker),
+        "ticker_track_record": get_ticker_stats(ticker),
         "market_context": get_market_context()[:1000],
     }
     return packet
