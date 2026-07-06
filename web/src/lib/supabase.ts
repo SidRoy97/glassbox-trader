@@ -6,7 +6,8 @@ const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "anon";
 
 export const supabase = createClient(url, key);
 
-export const SITE_MODE = "RESEARCH"; // switching to PAPER in phase 4
+export const SITE_MODE =
+  process.env.NEXT_PUBLIC_SITE_MODE || "RESEARCH"; // PAPER via vercel env
 
 export interface KeyPoint { claim: string; evidence_field: string; }
 
