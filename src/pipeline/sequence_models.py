@@ -10,7 +10,7 @@ from core.config import (DATA_PATH, MODEL_PATH, OBS_PATH, SEQ_WINDOW, SEQ_EPOCHS
                     SEQ_BATCH, SEQ_THRESHOLD, PER_STOCK_SAMPLE,
                     TRAIN_END, VAL_END)
 from core.helpers import log, save_plot, section
-from experiments import enhanced_feature_cols
+from pipeline.experiments import enhanced_feature_cols
 
 
 def build_sequences(frame, feature_cols, window=SEQ_WINDOW):
