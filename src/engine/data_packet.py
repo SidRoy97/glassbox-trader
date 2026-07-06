@@ -68,5 +68,5 @@ def build_packet(ticker, news_items):
 def packet_to_text(packet):
     # serializing the packet as clearly delimited json for prompts
     return ("=== DATA PACKET (the only permitted evidence) ===\n"
-            + json.dumps(packet, indent=1, default=str)[:6000]
+            + json.dumps(packet, indent=1, default=str)[:4500]
             + "\n=== END DATA PACKET ===")
