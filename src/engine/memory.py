@@ -166,3 +166,11 @@ def prune_news(years=5):
               - timedelta(days=int(years * 365))).isoformat()
     return get_client().table("news_archive").delete() \
         .lt("published_at", cutoff).execute()
+
+
+def get_open_position(ticker):
+    # fetching any open position for one ticker for packet awareness
+    ticker = validate_ticker(ticker)
+    res = get_client().table("positions").select("qty,entry_price,entry_date") \
+        .eq("ticker", ticker).eq("status", "OPEN").limit(1).execute()
+    return res.data[0] if res.data else None
