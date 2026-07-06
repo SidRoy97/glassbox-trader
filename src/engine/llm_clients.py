@@ -11,7 +11,7 @@ MAX_TOKENS = 600
 TIMEOUT = 45
 
 GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
-              "gemini-2.5-flash:generateContent")
+              "{}:generateContent").format(os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"))
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 
@@ -35,7 +35,7 @@ def ask_groq(prompt):
     key = os.environ.get("GROQ_API_KEY")
     r = requests.post(GROQ_URL,
                       headers={"Authorization": f"Bearer {key}"},
-                      json={"model": "llama-3.3-70b-versatile",
+                      json={"model": os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
                             "messages": [{"role": "user", "content": prompt}],
                             "max_tokens": MAX_TOKENS, "temperature": 0.4},
                       timeout=TIMEOUT)
@@ -48,7 +48,7 @@ def ask_mistral(prompt):
     key = os.environ.get("MISTRAL_API_KEY")
     r = requests.post(MISTRAL_URL,
                       headers={"Authorization": f"Bearer {key}"},
-                      json={"model": "mistral-small-latest",
+                      json={"model": os.environ.get("MISTRAL_MODEL", "mistral-small-latest"),
                             "messages": [{"role": "user", "content": prompt}],
                             "max_tokens": MAX_TOKENS, "temperature": 0.4},
                       timeout=TIMEOUT)
