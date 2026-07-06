@@ -11,6 +11,23 @@ REVIEW_SCHEMA = ["status", "confidence", "reason"]
 AUTO_WEAKEN_MOVE = 0.10          # flagging any thesis fighting a 10% adverse move
 
 
+def fetch_institutional(ticker):
+    # summarising top institutional holders as thesis evidence
+    try:
+        import yfinance as yf
+        df = yf.Ticker(ticker.replace(".", "-")).institutional_holders
+        if df is None or df.empty:
+            return []
+        out = []
+        for _, row in df.head(5).iterrows():
+            out.append({"holder": str(row.get("Holder", ""))[:80],
+                        "pct_out": float(row.get("pctHeld",
+                                         row.get("% Out", 0)) or 0)})
+        return out
+    except Exception:
+        return []
+
+
 def propose_thesis(ticker):
     # asking gemini whether the accumulated evidence supports a thesis
     ticker = validate_ticker(ticker)
@@ -21,15 +38,19 @@ def propose_thesis(ticker):
     same_dir = [d for d in decisions if d.get("action") == "BUY"]
     if len(same_dir) < 3:
         return None
+    institutional = fetch_institutional(ticker)
 
     prompt = ("You are a long-horizon analyst. Based ONLY on the evidence "
               "below, state whether a structural multi-month thesis exists "
-              "for this stock. If evidence is weak, set confidence below "
-              "0.5. Respond with ONLY json: "
+              "for this stock. Institutional positions are facts; treat "
+              "opinions in headlines as weak evidence. If evidence is weak, "
+              "set confidence below 0.5. Respond with ONLY json: "
               '{"thesis_text": str, "direction": "LONG"|"SHORT", '
               '"confidence": float 0-1}\n\nEVIDENCE:\n'
               + json.dumps({"ticker": ticker, "decisions": decisions,
-                            "news": news}, default=str)[:5000])
+                            "news": news,
+                            "institutional_holders": institutional},
+                           default=str)[:5000])
     reply = parse_json_reply(ask("gemini", prompt), THESIS_SCHEMA)
     if not reply or reply.get("confidence", 0) < 0.6 \
             or reply.get("direction") not in ("LONG", "SHORT"):
@@ -38,7 +59,8 @@ def propose_thesis(ticker):
     row = {"ticker": ticker, "thesis_text": str(reply["thesis_text"])[:2000],
            "direction": reply["direction"],
            "confidence": float(reply["confidence"]),
-           "evidence": {"decisions": decisions[:5], "news": news[:5]},
+           "evidence": {"decisions": decisions[:5], "news": news[:5],
+                        "institutional": institutional},
            "review_after": str(date.today() + timedelta(days=7))}
     get_client().table("theses").insert(row).execute()
     return row
