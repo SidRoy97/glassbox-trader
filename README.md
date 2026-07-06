@@ -111,14 +111,22 @@ truth, market calendar).
   CNN signal, and the news that preceded each — and asks for at most 2 **systematic** patterns
   (not one-off bad luck), each citing its evidence cases. Surviving lessons are deduped, capped
   at 10 active, and injected into every future debate. This is the "why" layer.
-- **Continuous:** a shadow tournament records cnn1d and random_forest predictions on identical
-  tickers and days; code scores both; the weekly report shows the standings. Theses are
+- **Continuous:** a shadow tournament records every competitor's prediction on identical
+  tickers and days — up to **eight models** after the first retrain: five sequence
+  architectures (cnn1d, LSTM, GRU, TCN, Transformer), two tabular families (Random Forest,
+  XGBoost), and a free **ensemble** entrant that votes the majority of all others. Code scores
+  everyone; the Signals page charts the standings and the cumulative race. Theses are
   re-examined weekly and auto-weakened if the market moves 10% against them.
 - **Weekly election:** the tournament is not just a scoreboard — it **governs**. Every Saturday,
-  whichever model has the better rolling hit rate (minimum 20 scored predictions, and a clear
-  +5-point margin so the title cannot flip-flop) is elected champion, and from Monday the
-  screener and every data packet run on the winner. Both models keep predicting in the shadow
-  regardless, so a dethroned model can earn the seat back.
+  whichever *routable* model has the better rolling hit rate (minimum 20 scored predictions,
+  and a clear +5-point margin so the title cannot flip-flop) is elected champion, and from
+  Monday the screener and every data packet run on the winner. Two promotion paths exist:
+  tabular models reach power through the election; sequence architectures reach it by winning
+  the retrain's holdout gate and becoming the deployed model. Shadow-only competitors keep
+  building evidence either way, so a dethroned model can always earn the seat back.
+- **LLM judge scoreboard:** every judge vote is stored beside its outcome, so each provider
+  (Gemini, Llama, Mistral) gets a public accuracy ranking — BUY↔Up, SELL↔Down,
+  NO_TRADE↔Neutral — charted on the Signals page.
 - **Quarterly:** the weekly report prints the CNN's live hit rate against the ~33% random
   baseline. When it sags, the retrain workflow trains a challenger on a 5-year trailing window;
   it deploys **only if it beats the champion** on untouched recent data. Old artifacts are
@@ -140,7 +148,7 @@ the CNN, with clean supervised labels — is exactly the one that gets it.
 | Judges | all three families | — | `JUDGE_PANEL` |
 | Thesis agent & lesson distiller | Gemini 2.5 Flash | Google | `GEMINI_MODEL` |
 | Signal engine | 1D-CNN (classification head) | trained in-repo | quarterly retrain |
-| Shadow challenger | Random Forest | trained in-repo | can be elected champion weekly |
+| Shadow challengers | Random Forest, XGBoost, LSTM, GRU, TCN, Transformer, ensemble | trained in-repo | RF electable weekly; sequence models promoted via retrain gate |
 
 The CNN was chosen empirically: a 20-configuration bake-off (LSTM, GRU, TCN, CNN, Transformer ×
 regression/classification heads) where classification beat regression 0.44–0.47 vs 0.15–0.39
@@ -172,7 +180,7 @@ executing for others is regulated investment-adviser territory.
 | Weekdays 12:30 | `daily` | holiday check → market snapshot → universe scan → top-10 debates → gate → paper orders → position & performance sync → stale-position management |
 | Weekdays 22:30 | `score` | decisions and shadow predictions graded against the completed session |
 | Saturday 14:00 | `weekly` | scoring sweep → performance report → model tournament → paper P&L → thesis review & proposals → lesson distillation → news pruning (5-year retention) → report row for the site |
-| Manual | `retrain` | 5-year trailing retrain; challenger deploys and commits back only if it wins |
+| Manual | `retrain` | 5-year trailing retrain of the **full architecture roster** (cnn1d, LSTM, GRU, TCN, Transformer + XGBoost); the best challenger deploys only if it beats the champion; every architecture is saved as a shadow competitor |
 
 ---
 
@@ -180,12 +188,14 @@ executing for others is regulated investment-adviser territory.
 
 Nine pages, all reading Supabase live (public read-only under Row Level Security):
 **Briefing** (market banner + today's verdict cards) · **Scan** (the full top-20 ranking, debated
-names highlighted) · **Signals** (CNN calls and confidence over time) · **News** (every archived
-headline with sentiment) · **Track record** (every scored call, rolling hit rate vs random
-baseline, wrong vs missed counted separately) · **Performance** (paper equity vs SPY, closed
-trades with realized P&L) · **Reports** (the engine's weekly self-audits) · **Insights** (theses
-and lessons) · **Positions** (open paper holdings and gate interventions). Debate pages open
-with a 6-month candlestick chart marking the decision moment.
+names highlighted) · **Signals** (live signal cards, confidence over time, the **model
+tournament** standings and race chart, and the **LLM judge accuracy** scoreboard) · **News**
+(every archived headline with sentiment) · **Track record** (every scored call, rolling hit rate
+vs random baseline, wrong vs missed counted separately, **CSV export**) · **Performance** (paper
+equity vs SPY, closed trades with realized P&L, **CSV export**) · **Reports** (the engine's
+weekly trading self-audits) · **Insights** (theses and lessons) · **Positions** (open paper
+holdings and gate interventions). Debate pages open with a 6-month candlestick chart marking
+the decision moment.
 
 ---
 
@@ -205,8 +215,9 @@ ALPACA_SECRET_KEY=
 PAPER_TRADING=true
 ```
 
-1. Run the SQL files in `src/engine/` (schema, RLS, screen, model_predictions, performance,
-   reports) in the Supabase SQL editor.
+1. Run the SQL files in `src/engine/` (schema, RLS, screen_results, model_predictions,
+   performance, reports, config) in the Supabase SQL editor — **12 tables total**, all with
+   row level security enabled and public read-only policies.
 2. Mirror the keys as GitHub Actions secrets; add repo variables `PAPER_TRADING=true`
    (optionally `DEBATE_BUDGET`, `TRADING_MODE`).
 3. Deploy `web/` on Vercel (root directory `web`) with `NEXT_PUBLIC_SUPABASE_URL`,
