@@ -35,7 +35,7 @@ def _rebuttal_prompt(packet, stance, opposing_cases):
             f'json schema: {{"stance": "{stance}", "key_points": '
             f'[{{"claim": str, "evidence_field": str}}], '
             f'"confidence": float 0-1}}\n\nOPPOSING CASES:\n'
-            + json.dumps(opposing_cases, default=str)[:2500]
+            + json.dumps(opposing_cases, default=str)[:1500]
             + "\n\n" + packet_to_text(packet))
 
 
@@ -47,10 +47,10 @@ def _judge_prompt(packet, bull, bear, bull_reb, bear_reb):
             "Vote NO_TRADE when evidence is weak or balanced.\n" + GROUNDING +
             '\njson schema: {"vote": "BUY"|"SELL"|"NO_TRADE", '
             '"reason": str, "confidence": float 0-1}\n\nBULL CASES:\n'
-            + json.dumps(bull, default=str)[:2000] + "\nBEAR CASES:\n"
-            + json.dumps(bear, default=str)[:2000] + "\nBULL REBUTTAL:\n"
-            + json.dumps(bull_reb, default=str)[:1200] + "\nBEAR REBUTTAL:\n"
-            + json.dumps(bear_reb, default=str)[:1200]
+            + json.dumps(bull, default=str)[:1200] + "\nBEAR CASES:\n"
+            + json.dumps(bear, default=str)[:1200] + "\nBULL REBUTTAL:\n"
+            + json.dumps(bull_reb, default=str)[:800] + "\nBEAR REBUTTAL:\n"
+            + json.dumps(bear_reb, default=str)[:800]
             + "\n\n" + packet_to_text(packet))
 
 
