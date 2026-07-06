@@ -20,12 +20,16 @@ SECTOR_ETF = {
     "Utilities": "XLU",
     "Real Estate": "XLRE",
     "Telecommunications Services": "XLC",
+    "Communication Services": "XLC",
 }
 
 
 def lookup_sector(ticker):
     # finding the ticker's GICS sector from the dataset securities file
-    sec = pd.read_csv(os.path.join(DATA_PATH, "securities.csv"),
+    uni_path = os.path.join(DATA_PATH, "universe.csv")
+    sec_path = uni_path if os.path.exists(uni_path) \
+        else os.path.join(DATA_PATH, "securities.csv")
+    sec = pd.read_csv(sec_path,
                       usecols=["Ticker symbol", "GICS Sector"])
     row = sec[sec["Ticker symbol"].str.upper() == ticker.upper()]
     return row["GICS Sector"].iloc[0] if not row.empty else None

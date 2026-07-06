@@ -16,7 +16,11 @@ from inference.predictors import load_seq_predictor, load_rf_predictor
 def prepare_oos_frame(limit=None, start=OOS_START, end=OOS_END):
     # downloading yfinance data and rebuilding the training feature pipeline
     import yfinance as yf
-    securities = pd.read_csv(os.path.join(DATA_PATH, "securities.csv"),
+    # preferring the refreshed current universe over the 2016 training roster
+    uni_path = os.path.join(DATA_PATH, "universe.csv")
+    sec_path = uni_path if os.path.exists(uni_path) \
+        else os.path.join(DATA_PATH, "securities.csv")
+    securities = pd.read_csv(sec_path,
                              usecols=["Ticker symbol", "GICS Sector"])
     securities = securities.rename(columns={"Ticker symbol": "symbol",
                                             "GICS Sector": "sector"})
