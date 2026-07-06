@@ -23,6 +23,23 @@ def _panel(env, default):
 BUY_PANEL = _panel("BULL_PANEL", "gemini,groq")
 SELL_PANEL = _panel("BEAR_PANEL", "mistral,groq")
 JUDGE_PANEL = _panel("JUDGE_PANEL", "gemini,groq,mistral")
+ALL_PROVIDERS = ["gemini", "groq", "mistral"]
+
+
+def _seat_reply(prompt, preferred, used, schema):
+    # filling one panel seat, falling back to any healthy unused provider
+    order = [preferred] + [p for p in ALL_PROVIDERS if p != preferred]
+    for provider in order:
+        if provider in used:
+            continue
+        reply = parse_json_reply(ask(provider, prompt), schema)
+        if reply:
+            if provider != preferred:
+                print(f"  [panel] {preferred} seat filled by {provider}")
+            reply["provider"] = provider
+            used.add(provider)
+            return reply
+    return None
 
 
 def _case_prompt(packet, stance):
@@ -64,35 +81,29 @@ def _judge_prompt(packet, bull, bear, bull_reb, bear_reb):
 
 
 def run_cases(packet, stance, panel):
-    # collecting independent opening cases from one panel
+    # collecting independent opening cases with per-seat provider fallback
     prompt = _case_prompt(packet, stance)
-    cases = []
+    cases, used = [], set()
     for provider in panel:
-        reply = parse_json_reply(ask(provider, prompt), CASE_SCHEMA)
+        reply = _seat_reply(prompt, provider, used, CASE_SCHEMA)
         if reply:
-            reply["provider"] = provider
             cases.append(reply)
     return cases
 
 
 def run_rebuttal(packet, stance, panel, opposing_cases):
-    # collecting one rebuttal from the first responsive panel member
+    # collecting one rebuttal, falling back past a dead preferred provider
     prompt = _rebuttal_prompt(packet, stance, opposing_cases)
-    for provider in panel[:1]:
-        reply = parse_json_reply(ask(provider, prompt), CASE_SCHEMA)
-        if reply:
-            reply["provider"] = provider
-            return [reply]
-    return []
+    reply = _seat_reply(prompt, panel[0], set(), CASE_SCHEMA)
+    return [reply] if reply else []
 
 
 def run_judges(packet, bull, bear, bull_reb, bear_reb):
-    # collecting independent votes from every judge
+    # collecting independent votes, each judge seat from a distinct provider
     prompt = _judge_prompt(packet, bull, bear, bull_reb, bear_reb)
-    votes = []
+    votes, used = [], set()
     for provider in JUDGE_PANEL:
-        reply = parse_json_reply(ask(provider, prompt), VOTE_SCHEMA)
+        reply = _seat_reply(prompt, provider, used, VOTE_SCHEMA)
         if reply and reply.get("vote") in ("BUY", "SELL", "NO_TRADE"):
-            reply["provider"] = provider
             votes.append(reply)
     return votes
