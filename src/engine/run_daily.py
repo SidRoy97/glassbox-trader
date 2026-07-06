@@ -8,12 +8,13 @@ from engine.data_packet import build_packet
 from engine.protocol import decide
 from engine.risk_gate import apply_gate
 from engine.thesis import propose_thesis, review_theses
+from engine.lessons import distill_lessons
 from engine.screener import select_watchlist
 from engine.shadow import (record_predictions,
                            score_model_predictions, model_report)
 from engine.execution import (maybe_enter, maybe_exit,
                               sync_positions_table, paper_report, enabled,
-                              is_trading_day)
+                              is_trading_day, manage_positions)
 from engine.memory import (insert_decision, get_unscored_decisions,
                            score_decision, upsert_market_context,
                            validate_ticker, save_screen_results,
@@ -106,6 +107,10 @@ def run_daily():
             print(f"[paper] position sync failed: {e}")
         from engine.performance import sync_performance
         sync_performance()
+        try:
+            manage_positions()
+        except Exception as e:
+            print(f"[paper] position management failed: {e}")
     print(f"\ndaily run complete: {results}")
 
 
@@ -190,6 +195,43 @@ def performance_report(window=60):
           f"(random baseline ~{len(rows)//3}) — retrain when this sags")
 
 
+def write_weekly_report():
+    # assembling one machine-readable report row for the site
+    from engine.memory import get_client, save_weekly_report
+    from datetime import datetime, timedelta, timezone
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    dec = get_client().table("decisions") \
+        .select("action,was_correct,scored_at") \
+        .gte("decided_at", week_ago).execute().data or []
+    scored = [d for d in dec if d["scored_at"]]
+    preds = get_client().table("model_predictions") \
+        .select("model,was_correct").not_.is_("scored_at", "null") \
+        .gte("pred_date", week_ago[:10]).execute().data or []
+    models = {}
+    for p in preds:
+        m = models.setdefault(p["model"], {"correct": 0, "scored": 0})
+        m["scored"] += 1
+        m["correct"] += 1 if p["was_correct"] else 0
+    lessons_new = get_client().table("lessons").select("lesson_text") \
+        .gte("created_at", week_ago).execute().data or []
+    stats = {"decisions": len(dec),
+             "scored": len(scored),
+             "correct": sum(1 for d in scored if d["was_correct"]),
+             "trades": sum(1 for d in dec if d["action"] != "NO_TRADE"),
+             "models": models,
+             "new_lessons": [l["lesson_text"][:200] for l in lessons_new]}
+    if enabled():
+        try:
+            from engine.execution import get_account
+            acct = get_account()
+            stats["equity"] = float(acct["equity"])
+            stats["last_equity"] = float(acct["last_equity"])
+        except Exception:
+            pass
+    save_weekly_report(stats)
+    print("weekly report row saved")
+
+
 def weekly_review():
     # scoring outcomes, reporting performance, reviewing recent tickers
     score_outcomes()
@@ -197,6 +239,8 @@ def weekly_review():
     performance_report()
     model_report()
     paper_report()
+    distill_lessons()
+    write_weekly_report()
     if enabled():
         from engine.performance import sync_performance
         sync_performance()
