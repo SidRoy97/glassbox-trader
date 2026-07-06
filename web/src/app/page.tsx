@@ -20,9 +20,11 @@ async function fetchData() {
     if (seen.has(d.ticker)) return false;
     seen.add(d.ticker); return true;
   });
+  // hiding legacy debug-format context rows from the banner
+  const raw = ctx.data?.[0]?.summary_text || "";
   return {
     latest,
-    context: ctx.data?.[0]?.summary_text || "",
+    context: raw.startsWith("run at ") ? "" : raw,
     scored: scored.data || [],
   };
 }
