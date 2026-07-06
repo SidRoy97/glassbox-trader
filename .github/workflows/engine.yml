@@ -27,8 +27,14 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: install cpu torch first to avoid the cuda bundle
-        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: install cpu torch with retries and a pypi fallback
+        run: |
+          for i in 1 2 3; do
+            pip install torch --index-url https://download.pytorch.org/whl/cpu && break
+            echo "pytorch cpu index failed, retry $i in 30s"
+            sleep 30
+          done
+          python -c "import torch" 2>/dev/null || pip install torch
 
       - name: install remaining dependencies
         run: pip install -r requirements.txt
