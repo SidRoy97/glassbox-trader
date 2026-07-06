@@ -59,15 +59,24 @@ def ask_mistral(prompt):
 PROVIDERS = {"gemini": ask_gemini, "groq": ask_groq, "mistral": ask_mistral}
 
 
+_consecutive_failures = {}
+
+
 def ask(provider, prompt):
-    # routing one prompt with one retry and visible failure logging
+    # routing one prompt with retry, logging, and a per-run circuit breaker
     import time
+    if _consecutive_failures.get(provider, 0) >= 3:
+        print(f"  [llm] {provider} circuit open — skipping for this run")
+        return None
     for attempt in (1, 2):
         try:
-            return PROVIDERS[provider](prompt)
+            reply = PROVIDERS[provider](prompt)
+            _consecutive_failures[provider] = 0
+            return reply
         except Exception as e:
             print(f"  [llm] {provider} attempt {attempt} failed: {e}")
             time.sleep(3)
+    _consecutive_failures[provider] =         _consecutive_failures.get(provider, 0) + 1
     return None
 
 

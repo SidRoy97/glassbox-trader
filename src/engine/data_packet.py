@@ -7,18 +7,56 @@ from engine.memory import (get_recent_news, get_recent_decisions,
                            get_open_position, get_ticker_stats)
 
 
+def _rf_signal(df):
+    # producing the packet signal from the random forest on the latest row
+    import numpy as np
+    from inference.predictors import load_rf_predictor
+    rf = load_rf_predictor()
+    if rf is None:
+        return None
+    frame = df.copy()
+    for c in rf["feature_cols"]:
+        if c not in frame.columns:
+            frame[c] = np.nan
+    latest = frame.iloc[[-1]][rf["feature_cols"]]
+    x = rf["scaler"].transform(rf["imputer"].transform(latest))
+    p = rf["model"].predict_proba(x)[0]
+    idx = int(p.argmax())
+    row = df.iloc[-1]
+    return {"model": "random_forest",
+            "direction": str(rf["label_encoder"].classes_[idx]),
+            "confidence": round(float(p[idx]), 4),
+            "close": round(float(row["close"]), 2),
+            "rsi": round(float(row["rsi"]), 1),
+            "return_5d": round(float(row["return_5d"]), 4),
+            "return_10d": round(float(row["return_10d"]), 4),
+            "pct_vs_ma50": round(float(row["close"] / row["ma50"] - 1), 4),
+            "vol_ratio": round(float(row["vol_ratio"]), 2),
+            "rel_to_sector": round(float(row["rel_to_sector"]), 4)}
+
+
 def get_cnn_signal(ticker):
-    # calling the local signal pipeline directly for the model prediction
+    # producing the packet signal from whichever model holds the title
     import numpy as np
     import torch
     from inference.predictors import load_seq_predictor
     from inference.live_features import build_live_frame, fill_missing_features
+    from engine.champion import get_champion
+    champion = "cnn1d"
+    try:
+        champion = get_champion()
+    except Exception:
+        pass
     seq = load_seq_predictor()
     if seq is None:
         return {"direction": "unavailable", "confidence": 0.0}
     df = build_live_frame(ticker)
     if df is None or df.empty:
         return {"direction": "unavailable", "confidence": 0.0}
+    if champion == "random_forest":
+        sig = _rf_signal(df)
+        if sig is not None:
+            return sig
     meta = seq["meta"]
     df = fill_missing_features(df, meta["feature_cols"], seq["scaler"])
     if len(df) < meta["window"]:
@@ -31,7 +69,8 @@ def get_cnn_signal(ticker):
     probs = np.exp(out) / np.exp(out).sum()
     idx = int(probs.argmax())
     latest = df.iloc[-1]
-    return {"direction": meta["classes"][idx],
+    return {"model": meta.get("kind", "cnn1d"),
+            "direction": meta["classes"][idx],
             "confidence": round(float(probs[idx]), 4),
             "close": round(float(latest["close"]), 2),
             "rsi": round(float(latest["rsi"]), 1),

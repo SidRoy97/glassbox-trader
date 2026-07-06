@@ -23,10 +23,12 @@ Every weekday at 12:30 UTC (pre-market ET), GitHub Actions runs the engine:
 **1. Market check.** Alpaca's calendar confirms the market opens today — holidays are skipped.
 A factual market snapshot (S&P 500, Nasdaq, VIX) is computed by code and stored.
 
-**2. Screener — the whole universe.** The trained 1D-CNN scans ~500 tickers in one batch
-(seconds of inference). Each ticker gets an **interest score** = directional conviction
-(non-Neutral confidence) + abnormal 1-day move + abnormal volume. The top 20 are recorded;
-the top 10 (minus anything debated in the last 2 days — cooldown rotation) advance to debate.
+**2. Screener — the whole universe.** The **elected champion model** (see the tournament below)
+scans ~500 tickers in one batch. Each ticker gets an **interest score** = directional conviction
+(non-Neutral confidence) + abnormal 1-day move + abnormal volume. The top 20 are recorded; most
+debate slots go to the top-ranked names (minus anything debated in the last 2 days — cooldown
+rotation), and **2 exploration wildcards** are sampled from the quiet mid-ranked names each day
+to counter momentum bias — so unremarkable-looking stocks still get their day in court.
 Roughly 30–40 unique names get debated per week.
 
 **3. The data packet — the only permitted evidence.** For each debated ticker, code assembles
@@ -112,6 +114,11 @@ truth, market calendar).
 - **Continuous:** a shadow tournament records cnn1d and random_forest predictions on identical
   tickers and days; code scores both; the weekly report shows the standings. Theses are
   re-examined weekly and auto-weakened if the market moves 10% against them.
+- **Weekly election:** the tournament is not just a scoreboard — it **governs**. Every Saturday,
+  whichever model has the better rolling hit rate (minimum 20 scored predictions, and a clear
+  +5-point margin so the title cannot flip-flop) is elected champion, and from Monday the
+  screener and every data packet run on the winner. Both models keep predicting in the shadow
+  regardless, so a dethroned model can earn the seat back.
 - **Quarterly:** the weekly report prints the CNN's live hit rate against the ~33% random
   baseline. When it sags, the retrain workflow trains a challenger on a 5-year trailing window;
   it deploys **only if it beats the champion** on untouched recent data. Old artifacts are
@@ -133,7 +140,7 @@ the CNN, with clean supervised labels — is exactly the one that gets it.
 | Judges | all three families | — | `JUDGE_PANEL` |
 | Thesis agent & lesson distiller | Gemini 2.5 Flash | Google | `GEMINI_MODEL` |
 | Signal engine | 1D-CNN (classification head) | trained in-repo | quarterly retrain |
-| Shadow challenger | Random Forest | trained in-repo | — |
+| Shadow challenger | Random Forest | trained in-repo | can be elected champion weekly |
 
 The CNN was chosen empirically: a 20-configuration bake-off (LSTM, GRU, TCN, CNN, Transformer ×
 regression/classification heads) where classification beat regression 0.44–0.47 vs 0.15–0.39
@@ -208,21 +215,33 @@ PAPER_TRADING=true
    `python -m engine.run_daily --mode daily`.
 
 Free-tier budget: ~9 LLM calls per debate; Groq's daily token cap is the binding constraint —
-`DEBATE_BUDGET=10` is safe, ~15 is the edge.
+`DEBATE_BUDGET=10` is safe, ~15 is the edge. A per-run circuit breaker skips any provider after
+three consecutive failures (the 2-of-3 judge majority still functions), and models, panels, and
+budgets are all env-swappable, so provider limit changes are a variable edit, not a code change.
 
 ---
 
-## Honest limitations
+## Honest limitations (and what mitigates them)
 
-- The CNN's out-of-sample edge is thin (~0.35 macro F1 vs 0.33 random). It is a calibrated
-  prior that disciplines the debate, not an oracle — the pipeline is the asset, weights are
-  perishable, and the drift monitor + retrain loop exist because of this.
-- The screener has a momentum bias by construction: it surfaces movers and conviction, so quiet
-  accumulation stories rarely reach debate. Track-record stats are therefore measured on a
-  pre-filtered, "interesting" population.
-- Direction accuracy is not profitability. The Performance page (trade-level P&L vs SPY) is the
-  only number that ultimately matters, and it takes months of paper trading to mean anything.
-- Free-tier LLM limits shape the design; provider limits change without notice.
+- The signal models' out-of-sample edge is thin (CNN ~0.35 macro F1 vs 0.33 random; the RF
+  ceilinged lower in testing). They are calibrated priors that discipline the debate, not
+  oracles. **Mitigations:** the drift monitor, the quarterly champion/challenger retrain, and
+  the weekly election that always seats the best-performing model — but note honestly that
+  comparison and election *select among* models; they do not raise any model's ceiling. The
+  ceiling of the price-only family is the founding argument for the news-reading LLM layer
+  above it.
+- The screener leans toward movers and conviction by construction. **Mitigation:** two daily
+  exploration wildcards sampled from quiet mid-ranked names, so the debated population is no
+  longer purely momentum-selected — though top slots still favor "interesting" days, and
+  track-record stats should be read with that in mind.
+- Direction accuracy is not profitability. **Mitigations:** the weekly report tracks the average
+  next-day return following BUY and SELL calls (a profitability proxy available immediately),
+  and the Performance page tracks real trade-level P&L against SPY — the number that ultimately
+  matters. Time is the one input that cannot be engineered; months of paper trading are the test.
+- Free-tier LLM limits shape the design. **Mitigations:** trimmed prompts sized to the binding
+  token caps, env-swappable models/panels/budgets, graceful 2-of-3 judge degradation, and a
+  per-provider circuit breaker — but provider limits change without notice, and the honest
+  long-term fix is the first paid dollar.
 
 **Disclaimer:** educational research output only — nothing here is financial advice. Every
 decision shown was produced by AI models debating public data, gated by hard-coded risk rules,

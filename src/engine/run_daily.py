@@ -9,6 +9,7 @@ from engine.protocol import decide
 from engine.risk_gate import apply_gate
 from engine.thesis import propose_thesis, review_theses
 from engine.lessons import distill_lessons
+from engine.champion import elect_champion, get_champion
 from engine.screener import select_watchlist
 from engine.shadow import (record_predictions,
                            score_model_predictions, model_report)
@@ -217,7 +218,21 @@ def write_weekly_report():
         m["correct"] += 1 if p["was_correct"] else 0
     lessons_new = get_client().table("lessons").select("lesson_text") \
         .gte("created_at", week_ago).execute().data or []
+    ninety = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+    hist = get_client().table("decisions") \
+        .select("action,outcome_return_1d") \
+        .not_.is_("scored_at", "null").gte("decided_at", ninety) \
+        .execute().data or []
+    buy_rets = [h["outcome_return_1d"] for h in hist
+                if h["action"] == "BUY" and h["outcome_return_1d"] is not None]
+    sell_rets = [h["outcome_return_1d"] for h in hist
+                 if h["action"] == "SELL" and h["outcome_return_1d"] is not None]
     stats = {"decisions": len(dec),
+             "champion": get_champion(),
+             "avg_1d_after_buy": round(sum(buy_rets) / len(buy_rets), 4)
+             if buy_rets else None,
+             "avg_1d_after_sell": round(sum(sell_rets) / len(sell_rets), 4)
+             if sell_rets else None,
              "scored": len(scored),
              "correct": sum(1 for d in scored if d["was_correct"]),
              "trades": sum(1 for d in dec if d["action"] != "NO_TRADE"),
@@ -243,6 +258,7 @@ def weekly_review():
     model_report()
     paper_report()
     distill_lessons()
+    elect_champion()
     write_weekly_report()
     if enabled():
         from engine.performance import sync_performance
