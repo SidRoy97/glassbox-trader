@@ -13,3 +13,6 @@ anthropic
 fastapi
 uvicorn
 vaderSentiment
+supabase
+feedparser
+python-dotenv
