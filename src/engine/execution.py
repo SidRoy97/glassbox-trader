@@ -14,7 +14,8 @@ LIVE_URL = "https://api.alpaca.markets/v2"
 LIVE_CONFIRM_SENTINEL = "I_UNDERSTAND_REAL_MONEY"
 RISK_PER_TRADE = 0.01        # risking one percent of equity per position
 STOP_ATR_MULT = 1.5          # placing the stop this many ATRs below entry
-REWARD_RISK = 2.0            # requiring two units of reward per unit of risk
+REWARD_RISK = 2.0            # placing the runner half's target at two r
+PARTIAL_R = 1.0              # banking the scalp half at one r of profit
 MAX_POSITION_FRACTION = 0.10  # capping any position at ten percent of equity
 MAX_DRAWDOWN_HALT = 0.10     # halting new entries past this peak-to-now drawdown
 MAX_HOLD_DAYS = 10           # closing stale positions unless a thesis backs them
@@ -126,19 +127,51 @@ def maybe_enter(ticker):
     if qty < 1:
         return f"{ticker}: position size below one share"
 
-    order = {"symbol": ticker.replace(".", "-"), "qty": str(qty),
+    scalp_target = round(levels["entry"]
+                         + PARTIAL_R * (levels["entry"] - levels["stop"]), 2)
+
+    # splitting into a one-r scalp half and a two-r runner half when possible
+    if qty >= 2:
+        runner = qty // 2
+        scalp = qty - runner
+        _place_bracket(ticker, scalp, scalp_target, levels["stop"])
+        _place_bracket(ticker, runner, levels["target"], levels["stop"])
+        note = (f"{ticker}: bought {qty} @ ~{levels['entry']} "
+                f"stop {levels['stop']} — scalp {scalp} tp {scalp_target}, "
+                f"runner {runner} tp {levels['target']} "
+                f"(atr {levels['atr']})")
+    else:
+        _place_bracket(ticker, qty, levels["target"], levels["stop"])
+        note = (f"{ticker}: bought {qty} @ ~{levels['entry']} "
+                f"stop {levels['stop']} target {levels['target']} "
+                f"(atr {levels['atr']})")
+    print(f"  [paper] {note}")
+    return note
+
+
+def _place_bracket(ticker, qty, target, stop):
+    # submitting one bracket order for a slice of the position
+    order = {"symbol": ticker.replace(".", "-"), "qty": str(int(qty)),
              "side": "buy", "type": "market", "time_in_force": "day",
              "order_class": "bracket",
-             "take_profit": {"limit_price": str(levels["target"])},
-             "stop_loss": {"stop_price": str(levels["stop"])}}
+             "take_profit": {"limit_price": str(target)},
+             "stop_loss": {"stop_price": str(stop)}}
     r = requests.post(f"{base_url()}/orders", headers=_headers(), json=order,
                       timeout=20)
     r.raise_for_status()
-    note = (f"{ticker}: bought {qty} @ ~{levels['entry']} "
-            f"stop {levels['stop']} target {levels['target']} "
-            f"(atr {levels['atr']})")
-    print(f"  [paper] {note}")
-    return note
+    return r.json()
+
+
+def _cancel_open_orders(symbol):
+    # cancelling every open order on one symbol so the position can close
+    orders = _get(f"/orders?status=open&symbols={symbol}&limit=100")
+    for o in orders:
+        try:
+            requests.delete(f"{base_url()}/orders/{o['id']}",
+                            headers=_headers(), timeout=20).raise_for_status()
+        except Exception as e:
+            print(f"  [paper] {symbol}: cancel {o['id'][:8]} failed: {e}")
+    return len(orders)
 
 
 def maybe_exit(ticker):
@@ -149,6 +182,8 @@ def maybe_exit(ticker):
     sym = ticker.replace(".", "-")
     if not any(p["symbol"] == sym for p in get_positions()):
         return f"{ticker}: no open position to exit"
+    # clearing bracket legs first so alpaca allows the liquidation
+    _cancel_open_orders(sym)
     r = requests.delete(f"{base_url()}/positions/{sym}", headers=_headers(),
                         timeout=20)
     r.raise_for_status()
