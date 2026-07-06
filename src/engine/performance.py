@@ -13,12 +13,13 @@ def sync_equity_history():
     hist = _get("/account/portfolio/history?period=1A&timeframe=1D")
     stamps = hist.get("timestamp") or []
     equity = hist.get("equity") or []
-    rows = []
+    by_day = {}
     for ts, eq in zip(stamps, equity):
         if eq is None:
             continue
         day = datetime.fromtimestamp(ts, tz=timezone.utc).date()
-        rows.append({"date": str(day), "equity": float(eq)})
+        by_day[str(day)] = float(eq)
+    rows = [{"date": d, "equity": e} for d, e in sorted(by_day.items())]
     if rows:
         get_client().table("portfolio_history").upsert(rows).execute()
     print(f"[perf] equity history synced: {len(rows)} days")
