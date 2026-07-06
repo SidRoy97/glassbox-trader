@@ -122,13 +122,15 @@ export function EquityCurve({ equity }:
     .useState<Record<string, string | number>[]>([]);
 
   (require("react") as typeof import("react")).useEffect(() => {
-    // normalising both series to 100 at the first shared date
-    const base = equity[0]?.equity;
-    const own = equity.map((e) => ({
+    // normalising both series to 100 at the first nonzero date
+    const clean = equity.filter((e) => e.equity > 0);
+    const base = clean[0]?.equity;
+    if (!base) { setData([]); return; }
+    const own = clean.map((e) => ({
       date: e.date.slice(5), engine: +(100 * e.equity / base).toFixed(2),
     }));
+    const first = clean[0]?.date;
     fetch("/api/candles/SPY").then((r) => r.json()).then(({ candles }) => {
-      const first = equity[0]?.date;
       const spy = (candles || []).filter((c: { time: number }) =>
         new Date(c.time * 1000).toISOString().slice(0, 10) >= (first || ""));
       const spyBase = spy[0]?.close;

@@ -18,8 +18,9 @@ export default async function Performance() {
   const wins = trades.filter((t) => t.pnl > 0);
   const losses = trades.filter((t) => t.pnl <= 0);
   const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);
-  const ret = equity.length > 1
-    ? (equity[equity.length - 1].equity / equity[0].equity - 1) * 100
+  const nonzero = equity.filter((e) => e.equity > 0);
+  const ret = nonzero.length > 1
+    ? (nonzero[nonzero.length - 1].equity / nonzero[0].equity - 1) * 100
     : null;
 
   return (

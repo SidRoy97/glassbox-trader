@@ -15,7 +15,7 @@ def sync_equity_history():
     equity = hist.get("equity") or []
     by_day = {}
     for ts, eq in zip(stamps, equity):
-        if eq is None:
+        if eq is None or float(eq) <= 0:
             continue
         day = datetime.fromtimestamp(ts, tz=timezone.utc).date()
         by_day[str(day)] = float(eq)
