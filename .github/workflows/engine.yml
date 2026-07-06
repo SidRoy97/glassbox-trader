@@ -56,6 +56,8 @@ jobs:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           PAPER_TRADING: ${{ vars.PAPER_TRADING }}
+          TRADING_MODE: ${{ vars.TRADING_MODE }}
+          LIVE_TRADING_CONFIRM: ${{ secrets.LIVE_TRADING_CONFIRM }}
           STOCK_LENS_BASE: ${{ github.workspace }}/stock-lens-data
           PYTHONPATH: ${{ github.workspace }}/src
         run: python -m engine.run_daily --mode "${{ steps.mode.outputs.mode }}"

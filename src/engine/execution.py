@@ -9,7 +9,9 @@ from engine.memory import get_client, validate_ticker
 
 load_dotenv()
 
-BASE = "https://paper-api.alpaca.markets/v2"
+PAPER_URL = "https://paper-api.alpaca.markets/v2"
+LIVE_URL = "https://api.alpaca.markets/v2"
+LIVE_CONFIRM_SENTINEL = "I_UNDERSTAND_REAL_MONEY"
 RISK_PER_TRADE = 0.01        # risking one percent of equity per position
 STOP_ATR_MULT = 1.5          # placing the stop this many ATRs below entry
 REWARD_RISK = 2.0            # requiring two units of reward per unit of risk
@@ -18,11 +20,30 @@ MAX_DRAWDOWN_HALT = 0.10     # halting new entries past this peak-to-now drawdow
 MAX_HOLD_DAYS = 10           # closing stale positions unless a thesis backs them
 
 
+def trading_mode():
+    # resolving paper or live with a double interlock guarding real money
+    mode = os.environ.get("TRADING_MODE", "").lower()
+    if not mode:
+        mode = "paper" if os.environ.get(
+            "PAPER_TRADING", "").lower() == "true" else ""
+    if mode == "live" and os.environ.get(
+            "LIVE_TRADING_CONFIRM") != LIVE_CONFIRM_SENTINEL:
+        print("[exec] TRADING_MODE=live set without LIVE_TRADING_CONFIRM "
+              "sentinel — refusing live, staying disabled")
+        return ""
+    return mode if mode in ("paper", "live") else ""
+
+
+def base_url():
+    # selecting the endpoint strictly from the resolved mode
+    return LIVE_URL if trading_mode() == "live" else PAPER_URL
+
+
 def enabled():
-    # trading only when the flag and both keys are explicitly present
-    return (os.environ.get("PAPER_TRADING", "").lower() == "true"
-            and os.environ.get("ALPACA_API_KEY")
-            and os.environ.get("ALPACA_SECRET_KEY"))
+    # trading only when a valid mode and both keys are explicitly present
+    return bool(trading_mode()
+                and os.environ.get("ALPACA_API_KEY")
+                and os.environ.get("ALPACA_SECRET_KEY"))
 
 
 def _headers():
@@ -31,7 +52,7 @@ def _headers():
 
 
 def _get(path):
-    r = requests.get(f"{BASE}{path}", headers=_headers(), timeout=20)
+    r = requests.get(f"{base_url()}{path}", headers=_headers(), timeout=20)
     r.raise_for_status()
     return r.json()
 
@@ -110,7 +131,7 @@ def maybe_enter(ticker):
              "order_class": "bracket",
              "take_profit": {"limit_price": str(levels["target"])},
              "stop_loss": {"stop_price": str(levels["stop"])}}
-    r = requests.post(f"{BASE}/orders", headers=_headers(), json=order,
+    r = requests.post(f"{base_url()}/orders", headers=_headers(), json=order,
                       timeout=20)
     r.raise_for_status()
     note = (f"{ticker}: bought {qty} @ ~{levels['entry']} "
@@ -128,7 +149,7 @@ def maybe_exit(ticker):
     sym = ticker.replace(".", "-")
     if not any(p["symbol"] == sym for p in get_positions()):
         return f"{ticker}: no open position to exit"
-    r = requests.delete(f"{BASE}/positions/{sym}", headers=_headers(),
+    r = requests.delete(f"{base_url()}/positions/{sym}", headers=_headers(),
                         timeout=20)
     r.raise_for_status()
     print(f"  [paper] {ticker}: position closed on SELL vote")

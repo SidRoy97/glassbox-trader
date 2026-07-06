@@ -81,6 +81,9 @@ def run_daily():
     if not is_trading_day():
         print("market holiday — skipping today's run")
         return
+    if enabled():
+        from engine.execution import trading_mode, base_url
+        print(f"[exec] mode={trading_mode().upper()} endpoint={base_url()}")
     upsert_market_context(market_summary())
 
     limit = int(SCAN_LIMIT) if SCAN_LIMIT else None
