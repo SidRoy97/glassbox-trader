@@ -20,8 +20,20 @@ def set_champion(name):
         {"key": "signal_champion", "value": str(name)[:40]}).execute()
 
 
+def _electable():
+    # limiting the election to models the screener and packet can run
+    names = {"random_forest"}
+    try:
+        from inference.predictors import load_seq_predictor
+        seq = load_seq_predictor()
+        names.add(seq["meta"].get("kind", "cnn1d") if seq else "cnn1d")
+    except Exception:
+        names.add("cnn1d")
+    return names
+
+
 def elect_champion():
-    # promoting whichever model has clearly won recent scored predictions
+    # promoting whichever routable model clearly won recent predictions
     rows = get_client().table("model_predictions") \
         .select("model,was_correct").not_.is_("scored_at", "null") \
         .order("pred_date", desc=True).limit(400).execute().data or []
@@ -30,7 +42,14 @@ def elect_champion():
         s = stats.setdefault(r["model"], [0, 0])
         s[1] += 1
         s[0] += 1 if r["was_correct"] else 0
-    rates = {m: (c / n, n) for m, (c, n) in stats.items() if n >= MIN_SCORED}
+    routable = _electable()
+    rates = {m: (c / n, n) for m, (c, n) in stats.items()
+             if n >= MIN_SCORED and m in routable}
+    shadow_only = {m: f"{c / n:.0%}/{n}" for m, (c, n) in stats.items()
+                   if n >= MIN_SCORED and m not in routable}
+    if shadow_only:
+        print(f"election: shadow-only standings (promoted via retrain "
+              f"gate, not election): {shadow_only}")
     if not rates:
         print("election: not enough scored predictions yet — "
               f"champion stays {get_champion()}")

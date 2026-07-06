@@ -121,6 +121,32 @@ def retrain(limit=None):
         log("no roster model trained — aborting")
         return
 
+    # training the tabular xgboost challenger on the same scaled split
+    try:
+        from xgboost import XGBClassifier
+        from sklearn.metrics import f1_score
+        label_map = {"Down": 0, "Neutral": 1, "Up": 2}
+        xgb = XGBClassifier(n_estimators=300, max_depth=6,
+                            learning_rate=0.08, subsample=0.8,
+                            colsample_bytree=0.8, eval_metric="mlogloss",
+                            n_jobs=4)
+        xgb.fit(train[feature_cols], train["true_label"].map(label_map),
+                eval_set=[(val[feature_cols],
+                           val["true_label"].map(label_map))],
+                verbose=False)
+        xgb_f1 = f1_score(eval_scaled["true_label"].map(label_map),
+                          xgb.predict(eval_scaled[feature_cols]),
+                          average="macro")
+        log(f"  xgboost: eval {xgb_f1:.4f} (shadow only)")
+        xdir = os.path.join(shadow_dir, "xgboost")
+        os.makedirs(xdir, exist_ok=True)
+        with open(os.path.join(xdir, "xgb.pkl"), "wb") as f:
+            pickle.dump({"model": xgb, "feature_cols": feature_cols,
+                         "scaler": scaler,
+                         "classes": ["Down", "Neutral", "Up"]}, f)
+    except Exception as e:
+        log(f"  xgboost: failed ({e}) — skipping")
+
     best_kind = max(roster_results, key=lambda k: roster_results[k][0])
     chal_f1, challenger = roster_results[best_kind]
     champion = load_seq_predictor()

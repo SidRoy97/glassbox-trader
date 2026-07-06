@@ -39,12 +39,25 @@ def _load_shadow_seq():
     return out
 
 
+def _load_shadow_xgb():
+    # loading the xgboost shadow when a retrain has produced one
+    path = os.path.join(MODEL_PATH, "shadow", "xgboost", "xgb.pkl")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "rb") as f:
+            return pickle.load(f)
+    except Exception:
+        return None
+
+
 def _models():
     # loading every deployed and shadow model once per process
     if not _cache:
         _cache["seq"] = load_seq_predictor()
         _cache["rf"] = load_rf_predictor()
         _cache["shadow_seq"] = _load_shadow_seq()
+        _cache["xgb"] = _load_shadow_xgb()
     return _cache
 
 
@@ -106,6 +119,31 @@ def record_predictions(ticker):
         rows.append({"model": "random_forest",
                      "direction": str(rf["label_encoder"].classes_[i]),
                      "confidence": round(float(p[i]), 4)})
+
+    xgb = m.get("xgb")
+    if xgb:
+        try:
+            frame = df.copy()
+            for c in xgb["feature_cols"]:
+                if c not in frame.columns:
+                    frame[c] = np.nan
+            latest = xgb["scaler"].transform(
+                frame.iloc[[-1]][xgb["feature_cols"]].fillna(0))
+            p = xgb["model"].predict_proba(latest)[0]
+            i = int(p.argmax())
+            rows.append({"model": "xgboost",
+                         "direction": xgb["classes"][i],
+                         "confidence": round(float(p[i]), 4)})
+        except Exception:
+            pass
+
+    # adding the free ensemble competitor voting across all models
+    if len(rows) >= 3:
+        from collections import Counter
+        top, _ = Counter(r["direction"] for r in rows).most_common(1)[0]
+        agree = [r["confidence"] for r in rows if r["direction"] == top]
+        rows.append({"model": "ensemble", "direction": top,
+                     "confidence": round(sum(agree) / len(agree), 4)})
 
     payload = [{"pred_date": str(date.today()), "ticker": ticker, **r}
                for r in rows]
