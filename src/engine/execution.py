@@ -1,0 +1,154 @@
+"""executing gated decisions on alpaca paper with code-computed risk levels"""
+
+import os
+import math
+import requests
+from datetime import datetime, timezone
+from dotenv import load_dotenv
+from engine.memory import get_client, validate_ticker
+
+load_dotenv()
+
+BASE = "https://paper-api.alpaca.markets/v2"
+RISK_PER_TRADE = 0.01        # risking one percent of equity per position
+STOP_ATR_MULT = 1.5          # placing the stop this many ATRs below entry
+REWARD_RISK = 2.0            # requiring two units of reward per unit of risk
+MAX_POSITION_FRACTION = 0.10  # capping any position at ten percent of equity
+
+
+def enabled():
+    # trading only when the flag and both keys are explicitly present
+    return (os.environ.get("PAPER_TRADING", "").lower() == "true"
+            and os.environ.get("ALPACA_API_KEY")
+            and os.environ.get("ALPACA_SECRET_KEY"))
+
+
+def _headers():
+    return {"APCA-API-KEY-ID": os.environ["ALPACA_API_KEY"],
+            "APCA-API-SECRET-KEY": os.environ["ALPACA_SECRET_KEY"]}
+
+
+def _get(path):
+    r = requests.get(f"{BASE}{path}", headers=_headers(), timeout=20)
+    r.raise_for_status()
+    return r.json()
+
+
+def get_account():
+    # reading paper equity and buying power
+    return _get("/account")
+
+
+def get_positions():
+    # listing open paper positions
+    return _get("/positions")
+
+
+def compute_levels(ticker):
+    # deriving entry, atr stop, and 2r target from recent daily bars
+    import yfinance as yf
+    hist = yf.download(ticker.replace(".", "-"), period="2mo",
+                       auto_adjust=True, progress=False)
+    if hist.empty or len(hist) < 15:
+        return None
+    high = hist["High"].squeeze()
+    low = hist["Low"].squeeze()
+    close = hist["Close"].squeeze()
+    prev_close = close.shift(1)
+    tr = (high - low).combine((high - prev_close).abs(), max) \
+        .combine((low - prev_close).abs(), max)
+    atr = float(tr.rolling(14).mean().iloc[-1])
+    entry = float(close.iloc[-1])
+    stop = round(entry - STOP_ATR_MULT * atr, 2)
+    target = round(entry + REWARD_RISK * (entry - stop), 2)
+    if stop <= 0 or stop >= entry:
+        return None
+    return {"entry": entry, "stop": stop, "target": target,
+            "atr": round(atr, 2)}
+
+
+def maybe_enter(ticker):
+    # opening a long bracket position sized to risk one percent of equity
+    if not enabled():
+        return "paper trading disabled"
+    ticker = validate_ticker(ticker)
+
+    # skipping when a position already exists for this symbol
+    if any(p["symbol"] == ticker.replace(".", "-") for p in get_positions()):
+        return f"{ticker}: position already open"
+
+    levels = compute_levels(ticker)
+    if levels is None:
+        return f"{ticker}: could not compute risk levels"
+
+    equity = float(get_account()["equity"])
+    risk_dollars = equity * RISK_PER_TRADE
+    per_share_risk = levels["entry"] - levels["stop"]
+    qty = math.floor(risk_dollars / per_share_risk)
+    max_qty = math.floor(equity * MAX_POSITION_FRACTION / levels["entry"])
+    qty = min(qty, max_qty)
+    if qty < 1:
+        return f"{ticker}: position size below one share"
+
+    order = {"symbol": ticker.replace(".", "-"), "qty": str(qty),
+             "side": "buy", "type": "market", "time_in_force": "day",
+             "order_class": "bracket",
+             "take_profit": {"limit_price": str(levels["target"])},
+             "stop_loss": {"stop_price": str(levels["stop"])}}
+    r = requests.post(f"{BASE}/orders", headers=_headers(), json=order,
+                      timeout=20)
+    r.raise_for_status()
+    note = (f"{ticker}: bought {qty} @ ~{levels['entry']} "
+            f"stop {levels['stop']} target {levels['target']} "
+            f"(atr {levels['atr']})")
+    print(f"  [paper] {note}")
+    return note
+
+
+def maybe_exit(ticker):
+    # closing any open position when the panels vote sell
+    if not enabled():
+        return "paper trading disabled"
+    ticker = validate_ticker(ticker)
+    sym = ticker.replace(".", "-")
+    if not any(p["symbol"] == sym for p in get_positions()):
+        return f"{ticker}: no open position to exit"
+    r = requests.delete(f"{BASE}/positions/{sym}", headers=_headers(),
+                        timeout=20)
+    r.raise_for_status()
+    print(f"  [paper] {ticker}: position closed on SELL vote")
+    return f"{ticker}: closed"
+
+
+def sync_positions_table():
+    # mirroring live alpaca positions into supabase for the site
+    if not enabled():
+        return
+    live = get_positions()
+    client = get_client()
+    client.table("positions").update({"status": "CLOSED"}) \
+        .eq("status", "OPEN").execute()
+    for p in live:
+        client.table("positions").upsert({
+            "ticker": p["symbol"].replace("-", "."),
+            "qty": float(p["qty"]),
+            "entry_price": float(p["avg_entry_price"]),
+            "entry_date": datetime.now(timezone.utc).isoformat(),
+            "status": "OPEN"}).execute()
+
+
+def paper_report():
+    # summarising paper account performance for the weekly log
+    if not enabled():
+        print("paper trading: disabled")
+        return
+    acct = get_account()
+    positions = get_positions()
+    print(f"paper account: equity ${float(acct['equity']):,.2f} "
+          f"(last ${float(acct['last_equity']):,.2f})")
+    for p in positions:
+        print(f"  open: {p['symbol']} x{p['qty']} "
+              f"entry {p['avg_entry_price']} "
+              f"unrealized {float(p['unrealized_pl']):+,.2f}")
+    if not positions:
+        print("  no open positions")
