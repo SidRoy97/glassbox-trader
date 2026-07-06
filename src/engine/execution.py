@@ -156,6 +156,51 @@ def maybe_exit(ticker):
     return f"{ticker}: closed"
 
 
+def _open_stop_orders(symbol):
+    # listing open protective stop legs for one symbol
+    orders = _get(f"/orders?status=open&symbols={symbol}"
+                  f"&limit=100&nested=false")
+    return [{"id": o["id"], "stop_price": o["stop_price"]}
+            for o in orders
+            if o.get("type") in ("stop", "stop_limit")
+            and o.get("side") == "sell" and o.get("stop_price")]
+
+
+def _replace_stop(order_id, stop_price):
+    # replacing one stop order at the new trailing level
+    r = requests.patch(f"{base_url()}/orders/{order_id}", headers=_headers(),
+                       json={"stop_price": str(stop_price)}, timeout=20)
+    r.raise_for_status()
+    return r.json()
+
+
+def _daily_bars(symbol):
+    # fetching a lowercase ohlc frame for trailing stop computation
+    import pandas as pd
+    import yfinance as yf
+    hist = yf.download(symbol, period="6mo", auto_adjust=True, progress=False)
+    if hist is None or hist.empty or len(hist) < 30:
+        return None
+    if isinstance(hist.columns, pd.MultiIndex):
+        hist.columns = hist.columns.get_level_values(0)
+    return hist.rename(columns=str.lower)[["open", "high", "low", "close"]]
+
+
+def ratchet_stops():
+    # tightening bracket stops toward the chandelier level, never loosening
+    if not enabled():
+        return []
+    from engine.stop_ratchet import ratchet_open_stops
+    return ratchet_open_stops(
+        list_positions=lambda: [
+            {"symbol": p["symbol"],
+             "side": "long" if float(p["qty"]) > 0 else "short",
+             "qty": p["qty"]} for p in get_positions()],
+        list_stop_orders=_open_stop_orders,
+        replace_stop=_replace_stop,
+        fetch_bars=_daily_bars)
+
+
 def sync_positions_table():
     # mirroring live alpaca positions while preserving first-seen entry dates
     if not enabled():

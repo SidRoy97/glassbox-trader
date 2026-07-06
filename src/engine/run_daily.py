@@ -15,7 +15,8 @@ from engine.shadow import (record_predictions,
                            score_model_predictions, model_report)
 from engine.execution import (maybe_enter, maybe_exit,
                               sync_positions_table, paper_report, enabled,
-                              is_trading_day, manage_positions)
+                              is_trading_day, manage_positions,
+                              ratchet_stops)
 from engine.memory import (insert_decision, get_unscored_decisions,
                            score_decision, upsert_market_context,
                            validate_ticker, save_screen_results,
@@ -86,6 +87,37 @@ def market_summary():
     return "; ".join(parts) if parts else "market data unavailable"
 
 
+def pick_watchlist(recently_debated, limit):
+    # combining user-pinned tickers with screener picks per the fill mode
+    pins, fill = [], "screener"
+    try:
+        pins, fill = get_watchlist()
+    except Exception as e:
+        print(f"[picks] watchlist config unavailable: {e}")
+
+    picks = []
+    for t in pins:
+        try:
+            t = validate_ticker(t)
+        except ValueError:
+            continue
+        if t not in picks:
+            picks.append(t)
+    picks = picks[:DEBATE_BUDGET]
+
+    # always scanning so screen_results and the site's scan page stay fresh
+    need = DEBATE_BUDGET - len(picks)
+    k = DEBATE_BUDGET if (fill == "empty" or need <= 0) else need
+    exclude = recently_debated | set(picks)
+    screener_picks, scan = select_watchlist(k=k, limit=limit, exclude=exclude)
+
+    if fill == "empty" and picks:
+        return picks, picks, scan
+    watchlist = (picks
+                 + [t for t in screener_picks if t not in picks])[:DEBATE_BUDGET]
+    return watchlist, picks, scan
+
+
 def run_daily():
     # scanning the universe, then debating only the most interesting tickers
     if not is_trading_day():
@@ -108,12 +140,12 @@ def run_daily():
 
     limit = int(SCAN_LIMIT) if SCAN_LIMIT and str(SCAN_LIMIT).strip() else None
     recently_debated = set(get_recent_tickers(days=DEBATE_COOLDOWN_DAYS))
-    watchlist, scan = select_watchlist(k=DEBATE_BUDGET, limit=limit,
-                                       exclude=recently_debated)
+    watchlist, picks, scan = pick_watchlist(recently_debated, limit)
     if scan:
         save_screen_results(scan, top_n=max(40, DEBATE_BUDGET + 10))
     print(f"debating today: {watchlist} "
-          f"(excluded {len(recently_debated)} on cooldown)")
+          f"(pinned: {picks or 'none'}, "
+          f"excluded {len(recently_debated)} on cooldown)")
 
     import time
     results = {}
@@ -127,6 +159,7 @@ def run_daily():
         # pausing between debates to stay under per-minute rate limits
         if i < len(watchlist) - 1:
             time.sleep(DEBATE_PAUSE_SEC)
+
     if enabled():
         try:
             sync_positions_table()
@@ -138,6 +171,12 @@ def run_daily():
             manage_positions()
         except Exception as e:
             print(f"[paper] position management failed: {e}")
+        try:
+            moved = ratchet_stops()
+            if moved:
+                print(f"  [paper] ratcheted {len(moved)} stop(s)")
+        except Exception as e:
+            print(f"[paper] stop ratchet failed: {e}")
     print(f"\ndaily run complete: {results}")
 
 
