@@ -17,7 +17,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +53,9 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          PAPER_TRADING: ${{ vars.PAPER_TRADING }}
           STOCK_LENS_BASE: ${{ github.workspace }}/stock-lens-data
           PYTHONPATH: ${{ github.workspace }}/src
         run: python -m engine.run_daily --mode "${{ steps.mode.outputs.mode }}"
