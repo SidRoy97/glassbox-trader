@@ -136,7 +136,7 @@ def select_watchlist(k=5, limit=None, exclude=None):
         return FALLBACK, []
     eligible = [r["ticker"] for r in results if r["ticker"] not in exclude]
 
-    slots = max(0, min(int(os.environ.get("EXPLORE_SLOTS", "2")), int(k) - 1))
+    slots = max(0, min(int(os.environ.get("EXPLORE_SLOTS") or "2"), int(k) - 1))
     top = eligible[:int(k) - slots]
 
     # sampling wildcards from mid-ranked names to counter momentum bias
