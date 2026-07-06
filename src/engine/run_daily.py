@@ -19,10 +19,18 @@ from engine.execution import (maybe_enter, maybe_exit,
 from engine.memory import (insert_decision, get_unscored_decisions,
                            score_decision, upsert_market_context,
                            validate_ticker, save_screen_results,
-                           get_recent_tickers, prune_news)
+                           get_recent_tickers, prune_news, get_watchlist)
 
-DEBATE_BUDGET = int(os.environ.get("DEBATE_BUDGET", "10"))
-DEBATE_COOLDOWN_DAYS = int(os.environ.get("DEBATE_COOLDOWN_DAYS", "2"))
+def _envint(name, default):
+    # reading an int env var, tolerating empty or malformed values
+    raw = os.environ.get(name, "")
+    try:
+        return int(raw) if raw.strip() else default
+    except ValueError:
+        return default
+
+DEBATE_BUDGET = _envint("DEBATE_BUDGET", 10)
+DEBATE_COOLDOWN_DAYS = _envint("DEBATE_COOLDOWN_DAYS", 2)
 SCAN_LIMIT = os.environ.get("SCAN_LIMIT")   # optional ticker cap for testing
 WATCHLIST = ["AAPL", "MSFT", "GOOGL", "NVDA", "JPM"]   # fallback only
 
@@ -97,7 +105,7 @@ def run_daily():
         print(f"[exec] mode={trading_mode().upper()} endpoint={base_url()}")
     upsert_market_context(market_summary())
 
-    limit = int(SCAN_LIMIT) if SCAN_LIMIT else None
+    limit = int(SCAN_LIMIT) if SCAN_LIMIT and str(SCAN_LIMIT).strip() else None
     recently_debated = set(get_recent_tickers(days=DEBATE_COOLDOWN_DAYS))
     watchlist, scan = select_watchlist(k=DEBATE_BUDGET, limit=limit,
                                        exclude=recently_debated)

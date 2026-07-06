@@ -193,3 +193,26 @@ def save_weekly_report(stats):
     from datetime import date
     return get_client().table("reports").upsert(
         {"week_of": str(date.today()), "stats": stats}).execute()
+
+
+def get_watchlist():
+    # reading user-pinned tickers and the fill mode from config
+    res = get_client().table("config").select("value") \
+        .eq("key", "user_watchlist").limit(1).execute().data
+    tickers = []
+    if res and res[0]["value"]:
+        tickers = [t.strip().upper() for t in res[0]["value"].split(",")
+                   if t.strip()]
+    mode_res = get_client().table("config").select("value") \
+        .eq("key", "watchlist_fill").limit(1).execute().data
+    fill = mode_res[0]["value"] if mode_res else "screener"
+    return tickers, fill
+
+
+def set_watchlist(tickers, fill="screener"):
+    # storing user-pinned tickers and fill mode (screener or empty)
+    clean = ",".join(validate_ticker(t) for t in tickers)
+    get_client().table("config").upsert(
+        {"key": "user_watchlist", "value": clean}).execute()
+    get_client().table("config").upsert(
+        {"key": "watchlist_fill", "value": fill}).execute()
