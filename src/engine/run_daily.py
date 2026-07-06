@@ -9,6 +9,8 @@ from engine.protocol import decide
 from engine.risk_gate import apply_gate
 from engine.thesis import propose_thesis, review_theses
 from engine.screener import select_watchlist
+from engine.shadow import (record_predictions,
+                           score_model_predictions, model_report)
 from engine.memory import (insert_decision, get_unscored_decisions,
                            score_decision, upsert_market_context,
                            validate_ticker, save_screen_results,
@@ -77,6 +79,7 @@ def run_daily():
     for ticker in watchlist:
         try:
             results[ticker] = run_ticker(ticker)
+            record_predictions(ticker)
         except Exception as e:
             print(f"{ticker} failed: {e}")
             results[ticker] = "ERROR"
@@ -167,7 +170,9 @@ def performance_report(window=60):
 def weekly_review():
     # scoring outcomes, reporting performance, reviewing recent tickers
     score_outcomes()
+    score_model_predictions()
     performance_report()
+    model_report()
     tickers = get_recent_tickers(days=30) or WATCHLIST
     prices = latest_prices(tickers)
     review_theses(lambda t: (prices.get(t) or {}).get("ret_5d"))
@@ -188,6 +193,7 @@ def main():
         run_daily()
     elif args.mode == "score":
         score_outcomes()
+        score_model_predictions()
     else:
         weekly_review()
 
