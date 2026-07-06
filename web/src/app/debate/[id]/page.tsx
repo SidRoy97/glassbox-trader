@@ -1,6 +1,7 @@
 // showing one decision's full debate in the dark theme
 import { supabase, Decision, PanelCase } from "@/lib/supabase";
 import { ActionBadge, ConfidenceBar, Disclaimer } from "@/lib/ui";
+import CandleChart from "@/lib/candle";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,13 @@ export default async function Debate({ params }:
         CNN signal: {d.cnn_direction} ({Math.round(d.cnn_confidence * 100)}%)
         · {d.risk_gate_note}
       </p>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mt-6">
+        <h2 className="text-sm font-semibold text-zinc-300 mb-3">
+          Price action (6 months, decision marked)
+        </h2>
+        <CandleChart ticker={d.ticker} decisionTime={d.decided_at} />
+      </div>
 
       <div className="grid md:grid-cols-2 gap-4 mt-6">
         <CaseBlock title="Bull case" cases={d.bull_case?.opening} tone="bull" />
