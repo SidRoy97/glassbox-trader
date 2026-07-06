@@ -115,3 +115,46 @@ export function SentimentBar({ data }:
     </ResponsiveContainer>
   );
 }
+
+export function EquityCurve({ equity }:
+  { equity: { date: string; equity: number }[] }) {
+  const [data, setData] = (require("react") as typeof import("react"))
+    .useState<Record<string, string | number>[]>([]);
+
+  (require("react") as typeof import("react")).useEffect(() => {
+    // normalising both series to 100 at the first shared date
+    const base = equity[0]?.equity;
+    const own = equity.map((e) => ({
+      date: e.date.slice(5), engine: +(100 * e.equity / base).toFixed(2),
+    }));
+    fetch("/api/candles/SPY").then((r) => r.json()).then(({ candles }) => {
+      const first = equity[0]?.date;
+      const spy = (candles || []).filter((c: { time: number }) =>
+        new Date(c.time * 1000).toISOString().slice(0, 10) >= (first || ""));
+      const spyBase = spy[0]?.close;
+      const byDate: Record<string, number> = {};
+      for (const c of spy) {
+        byDate[new Date(c.time * 1000).toISOString().slice(5, 10)] =
+          +(100 * c.close / spyBase).toFixed(2);
+      }
+      setData(own.map((o) => ({ ...o, spy: byDate[o.date] })));
+    }).catch(() => setData(own));
+  }, [equity]);
+
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <LineChart data={data}>
+        <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+        <XAxis dataKey="date" stroke={TEXT} fontSize={11} />
+        <YAxis domain={["auto", "auto"]} stroke={TEXT} fontSize={11} />
+        <Tooltip {...TOOLTIP} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Line type="monotone" dataKey="engine" stroke="#38bdf8"
+              strokeWidth={2} dot={false} name="paper account" />
+        <Line type="monotone" dataKey="spy" stroke="#71717a"
+              strokeWidth={2} dot={false} strokeDasharray="5 3"
+              name="SPY benchmark" />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}

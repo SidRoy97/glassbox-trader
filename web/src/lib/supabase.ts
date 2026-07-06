@@ -49,3 +49,11 @@ export interface ScreenRow {
   scan_date: string; ticker: string; direction: string;
   confidence: number; score: number;
 }
+
+export interface EquityPoint { date: string; equity: number; }
+
+export interface Trade {
+  exit_fill_id: string; ticker: string; qty: number;
+  entry_price: number; exit_price: number;
+  entry_at: string; exit_at: string; pnl: number; pnl_pct: number;
+}

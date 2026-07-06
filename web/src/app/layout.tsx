@@ -13,6 +13,7 @@ const NAV = [
   ["/signals", "Signals"],
   ["/news", "News"],
   ["/track", "Track record"],
+  ["/performance", "Performance"],
   ["/insights", "Insights"],
   ["/positions", "Positions"],
 ];
