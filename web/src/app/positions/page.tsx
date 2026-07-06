@@ -27,21 +27,36 @@ export default async function Positions() {
         <ModeBanner />
       </div>
 
-      <div className="mt-5 bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-sm text-zinc-400">
-        <span className="text-zinc-200 font-semibold">Operating modes.</span>{" "}
-        <span className="text-sky-400 font-medium">{SITE_MODE}</span> (current):
-        signals and debates only, no orders placed anywhere.{" "}
-        <span className="text-zinc-300">PAPER</span> (next phase): an Alpaca
-        paper account executes behind the risk gate — fake money, real
-        discipline, months of it.{" "}
-        <span className="text-zinc-300">LIVE</span>: never enabled lightly,
-        own-account only.
+      <div className="mt-5 bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-sm">
+        <span className="text-zinc-200 font-semibold">Operating modes.</span>
+        <ul className="mt-2 space-y-1.5">
+          {[
+            ["RESEARCH", "signals and debates only, no orders placed anywhere"],
+            ["PAPER", "an Alpaca paper account executes behind the risk gate — fake money, real discipline"],
+            ["LIVE", "real money, owner's account only, enabled by a deliberate double interlock"],
+          ].map(([mode, desc]) => (
+            <li key={mode} className="text-zinc-400">
+              <span className={mode === SITE_MODE
+                ? "text-sky-400 font-semibold" : "text-zinc-300"}>
+                {mode}
+              </span>
+              {mode === SITE_MODE && (
+                <span className="ml-1.5 text-xs bg-sky-500/15 text-sky-400 border border-sky-500/30 px-1.5 py-0.5 rounded-full">
+                  current
+                </span>
+              )}
+              <span className="ml-2">{desc}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <h2 className="text-lg font-semibold mt-8">Open positions</h2>
       {positions.length === 0 ? (
         <p className="text-zinc-500 mt-2 text-sm">
-          No open positions — paper trading begins in the next phase.
+          No open positions — the engine has not found a trade worth taking
+          yet. Restraint is the default; entries must earn their way past the
+          judges and the gate.
         </p>
       ) : (
         <table className="w-full mt-3 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden text-sm">

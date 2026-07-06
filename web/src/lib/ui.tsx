@@ -54,9 +54,11 @@ export function ModeBanner() {
         {SITE_MODE} MODE
       </span>
       <span className="text-zinc-500">
-        {SITE_MODE === "PAPER"
-          ? "simulated orders on a paper account — no real money"
-          : "signals & debates only — no orders are placed"}
+        {SITE_MODE === "LIVE"
+          ? "real orders on the owner's account — every trade accountable"
+          : SITE_MODE === "PAPER"
+            ? "simulated orders on a paper account — no real money"
+            : "signals & debates only — no orders are placed"}
       </span>
     </div>
   );

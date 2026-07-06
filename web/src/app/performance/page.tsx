@@ -1,5 +1,5 @@
 // showing the paper equity curve against spy and every closed trade
-import { supabase, EquityPoint, Trade } from "@/lib/supabase";
+import { supabase, EquityPoint, Trade, SITE_MODE } from "@/lib/supabase";
 import { Disclaimer, ModeBanner, StatCard } from "@/lib/ui";
 import { EquityCurve } from "@/lib/charts";
 import DownloadCsvButton from "@/lib/download";
@@ -30,8 +30,11 @@ export default async function Performance() {
         <div>
           <h1 className="text-2xl font-bold">Performance</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Paper account equity against SPY, and every closed trade with its
-            realized result. Fake money, real discipline.
+            Account equity against SPY, and every closed trade with its
+            realized result.{" "}
+            {SITE_MODE === "LIVE"
+              ? "Real money — every trade accountable."
+              : "Fake money, real discipline."}
           </p>
         </div>
         <ModeBanner />
