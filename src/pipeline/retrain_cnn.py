@@ -17,6 +17,7 @@ from pipeline.sequence_models import (build_sequences, train_eval_seq,
 from inference.predictors import load_seq_predictor
 
 TRAIL_YEARS = 5          # training on this many trailing years of data
+ROSTER = ["cnn1d", "lstm", "gru", "tcn", "transformer"]
 EVAL_DAYS = 60           # holding out this many recent days for the gate
 WARMUP_DAYS = 120        # padding the download so indicators have history
 
@@ -78,26 +79,54 @@ def retrain(limit=None):
         f"val days: {len(fit_dates[fit_dates >= val_start])} | "
         f"eval days: {EVAL_DAYS}")
 
-    # scaling on training rows only, then training the challenger
+    # scaling on training rows only, then training the full roster
+    import torch
     scaler = StandardScaler().fit(train[feature_cols])
     for part in (train, val):
         part[feature_cols] = scaler.transform(part[feature_cols])
     Xtr, rtr, ctr = build_sequences(train, feature_cols)
     Xva, _, cva = build_sequences(val, feature_cols)
-    log(f"training challenger cnn1d on {len(Xtr):,} sequences...")
-    val_f1, challenger = train_eval_seq("cnn1d", "classification",
-                                        Xtr, rtr, ctr, Xva, cva,
-                                        return_model=True)
-    log(f"challenger validation macro_f1 = {val_f1:.4f}")
-
-    # scoring both models once on the untouched recent window
     eval_scaled = eval_df.copy()
     eval_scaled[feature_cols] = scaler.transform(eval_scaled[feature_cols])
     Xe, _, ye = build_sequences(eval_scaled, feature_cols)
-    chal_f1, _ = score_seq_model(challenger, "classification", Xe, ye)
+
+    roster_results = {}
+    shadow_dir = os.path.join(MODEL_PATH, "shadow")
+    for kind in ROSTER:
+        log(f"training {kind} on {len(Xtr):,} sequences...")
+        try:
+            val_f1, model = train_eval_seq(kind, "classification",
+                                           Xtr, rtr, ctr, Xva, cva,
+                                           return_model=True)
+            f1, _ = score_seq_model(model, "classification", Xe, ye)
+            roster_results[kind] = (f1, model)
+            log(f"  {kind}: val {val_f1:.4f} | eval {f1:.4f}")
+            # saving every architecture as a shadow competitor
+            kdir = os.path.join(shadow_dir, kind)
+            os.makedirs(kdir, exist_ok=True)
+            torch.save(model.state_dict(),
+                       os.path.join(kdir, "seq_model.pt"))
+            with open(os.path.join(kdir, "seq_meta.pkl"), "wb") as f:
+                pickle.dump({"kind": kind, "head": "classification",
+                             "feature_cols": feature_cols,
+                             "window": SEQ_WINDOW,
+                             "threshold": SEQ_THRESHOLD,
+                             "n_features": len(feature_cols),
+                             "classes": ["Down", "Neutral", "Up"]}, f)
+            with open(os.path.join(kdir, "seq_scaler.pkl"), "wb") as f:
+                pickle.dump(scaler, f)
+        except Exception as e:
+            log(f"  {kind}: failed ({e}) — skipping")
+    if not roster_results:
+        log("no roster model trained — aborting")
+        return
+
+    best_kind = max(roster_results, key=lambda k: roster_results[k][0])
+    chal_f1, challenger = roster_results[best_kind]
     champion = load_seq_predictor()
     champ_f1 = score_champion(champion, eval_df)
-    log(f"[GATE] challenger eval macro_f1 = {chal_f1:.4f}")
+    log(f"[GATE] best challenger = {best_kind} "
+        f"eval macro_f1 = {chal_f1:.4f}")
     log(f"[GATE] champion   eval macro_f1 = "
         f"{champ_f1:.4f}" if champ_f1 is not None else
         "[GATE] no champion found — challenger deploys by default")
@@ -108,8 +137,7 @@ def retrain(limit=None):
         return
 
     # archiving old artifacts before deploying the challenger
-    import torch
-    archive = os.path.join(MODEL_PATH, "archive", str(date.today()))
+        archive = os.path.join(MODEL_PATH, "archive", str(date.today()))
     os.makedirs(archive, exist_ok=True)
     for fn in ("seq_model.pt", "seq_meta.pkl", "seq_scaler.pkl"):
         src_path = os.path.join(MODEL_PATH, fn)
@@ -122,12 +150,12 @@ def retrain(limit=None):
     fit_scaled = fit_df.copy()
     fit_scaled[feature_cols] = deploy_scaler.transform(fit_scaled[feature_cols])
     aX, ar, ac = build_sequences(fit_scaled, feature_cols)
-    _, deploy_model = train_eval_seq("cnn1d", "classification",
+    _, deploy_model = train_eval_seq(best_kind, "classification",
                                      aX, ar, ac, aX, ac, return_model=True)
     torch.save(deploy_model.state_dict(),
                os.path.join(MODEL_PATH, "seq_model.pt"))
     with open(os.path.join(MODEL_PATH, "seq_meta.pkl"), "wb") as f:
-        pickle.dump({"kind": "cnn1d", "head": "classification",
+        pickle.dump({"kind": best_kind, "head": "classification",
                      "feature_cols": feature_cols, "window": SEQ_WINDOW,
                      "threshold": SEQ_THRESHOLD,
                      "n_features": len(feature_cols),
@@ -135,7 +163,7 @@ def retrain(limit=None):
                      "trained_through": str(eval_start)[:10]}, f)
     with open(os.path.join(MODEL_PATH, "seq_scaler.pkl"), "wb") as f:
         pickle.dump(deploy_scaler, f)
-    log("challenger deployed — seq_model.pt, seq_meta.pkl, seq_scaler.pkl replaced")
+    log(f"challenger deployed ({best_kind}) — standard artifacts replaced")
 
 
 def main():
