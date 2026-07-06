@@ -12,7 +12,8 @@ from engine.screener import select_watchlist
 from engine.shadow import (record_predictions,
                            score_model_predictions, model_report)
 from engine.execution import (maybe_enter, maybe_exit,
-                              sync_positions_table, paper_report, enabled)
+                              sync_positions_table, paper_report, enabled,
+                              is_trading_day)
 from engine.memory import (insert_decision, get_unscored_decisions,
                            score_decision, upsert_market_context,
                            validate_ticker, save_screen_results,
@@ -76,6 +77,9 @@ def market_summary():
 
 def run_daily():
     # scanning the universe, then debating only the most interesting tickers
+    if not is_trading_day():
+        print("market holiday — skipping today's run")
+        return
     upsert_market_context(market_summary())
 
     limit = int(SCAN_LIMIT) if SCAN_LIMIT else None
