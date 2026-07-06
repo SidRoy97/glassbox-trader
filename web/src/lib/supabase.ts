@@ -43,3 +43,8 @@ export interface Thesis {
 }
 
 export interface Lesson { id: number; created_at: string; lesson_text: string; }
+
+export interface ScreenRow {
+  scan_date: string; ticker: string; direction: string;
+  confidence: number; score: number;
+}
