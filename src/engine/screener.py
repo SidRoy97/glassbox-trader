@@ -140,7 +140,7 @@ def select_watchlist(k=5, limit=None, exclude=None):
     top = eligible[:int(k) - slots]
 
     # sampling wildcards from mid-ranked names to counter momentum bias
-    pool = [t for t in eligible[20:250] if t not in top]
+    pool = [t for t in eligible[max(20, int(k)):250] if t not in top]
     random.seed(str(_date.today()))
     wild = random.sample(pool, min(slots, len(pool))) if pool else []
     if wild:
