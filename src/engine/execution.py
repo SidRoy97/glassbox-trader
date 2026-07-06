@@ -192,13 +192,19 @@ def maybe_exit(ticker):
 
 
 def _open_stop_orders(symbol):
-    # listing open protective stop legs for one symbol
+    # listing open protective stop legs, including ones nested under parents
     orders = _get(f"/orders?status=open&symbols={symbol}"
-                  f"&limit=100&nested=false")
+                  f"&limit=100&nested=true")
+    flat = []
+    for o in orders:
+        flat.append(o)
+        flat.extend(o.get("legs") or [])
+    live = ("new", "accepted", "held", "partially_filled")
     return [{"id": o["id"], "stop_price": o["stop_price"]}
-            for o in orders
+            for o in flat
             if o.get("type") in ("stop", "stop_limit")
-            and o.get("side") == "sell" and o.get("stop_price")]
+            and o.get("side") == "sell" and o.get("stop_price")
+            and o.get("status") in live]
 
 
 def _replace_stop(order_id, stop_price):
