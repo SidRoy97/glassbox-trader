@@ -47,6 +47,12 @@ jobs:
           git add stock-lens-data/models/seq_model.pt \
                   stock-lens-data/models/seq_meta.pkl \
                   stock-lens-data/models/seq_scaler.pkl \
+                  stock-lens-data/models/rf_model.pkl \
+                  stock-lens-data/models/scaler.pkl \
+                  stock-lens-data/models/imputer.pkl \
+                  stock-lens-data/models/label_encoder.pkl \
+                  stock-lens-data/models/feature_cols.pkl \
+                  stock-lens-data/models/shadow \
                   stock-lens-data/models/archive || true
           git diff --cached --quiet || \
             (git commit -m "retrain: deploy challenger model" && git push)

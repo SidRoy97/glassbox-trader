@@ -14,7 +14,7 @@ from core.helpers import log, section
 from pipeline.oos_evaluation import prepare_oos_frame
 from pipeline.sequence_models import (build_sequences, train_eval_seq,
                                       score_seq_model)
-from inference.predictors import load_seq_predictor
+from inference.predictors import load_seq_predictor, load_rf_predictor
 
 TRAIL_YEARS = 5          # training on this many trailing years of data
 ROSTER = ["cnn1d", "lstm", "gru", "tcn", "transformer"]
@@ -146,6 +146,73 @@ def retrain(limit=None):
                          "classes": ["Down", "Neutral", "Up"]}, f)
     except Exception as e:
         log(f"  xgboost: failed ({e}) — skipping")
+
+    # retraining the random forest so the electable tabular model stays fresh
+    try:
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.impute import SimpleImputer
+        from sklearn.preprocessing import LabelEncoder
+        from sklearn.metrics import f1_score
+        le = LabelEncoder().fit(["Down", "Neutral", "Up"])
+        imputer = SimpleImputer(strategy="median").fit(train[feature_cols])
+        rf_new = RandomForestClassifier(n_estimators=180, max_depth=16,
+                                        min_samples_leaf=5, n_jobs=-1,
+                                        random_state=42)
+        rf_new.fit(imputer.transform(train[feature_cols]),
+                   le.transform(train["true_label"]))
+        rf_f1 = f1_score(le.transform(eval_scaled["true_label"]),
+                         rf_new.predict(imputer.transform(
+                             eval_scaled[feature_cols])), average="macro")
+        log(f"  random_forest challenger: eval {rf_f1:.4f}")
+
+        # scoring the deployed rf on the same window for its mini-gate
+        old_rf = load_rf_predictor()
+        old_f1 = None
+        if old_rf:
+            frame = eval_df.copy()
+            for c in old_rf["feature_cols"]:
+                if c not in frame.columns:
+                    frame[c] = np.nan
+            Xo = old_rf["scaler"].transform(
+                old_rf["imputer"].transform(frame[old_rf["feature_cols"]]))
+            old_f1 = f1_score(
+                old_rf["label_encoder"].transform(frame["true_label"]),
+                old_rf["model"].predict(Xo), average="macro")
+            log(f"  random_forest incumbent : eval {old_f1:.4f}")
+
+        if old_f1 is None or rf_f1 > old_f1:
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                pickle.dump(rf_new, tmp)
+                tmp_path = tmp.name
+            size_mb = os.path.getsize(tmp_path) / 1e6
+            os.unlink(tmp_path)
+            if size_mb > 90:
+                log(f"  random_forest: {size_mb:.0f}MB exceeds repo "
+                    f"limit — incumbent kept")
+            else:
+                rf_archive = os.path.join(MODEL_PATH, "archive",
+                                          str(date.today()))
+                os.makedirs(rf_archive, exist_ok=True)
+                rf_files = ["rf_model.pkl", "scaler.pkl", "imputer.pkl",
+                            "label_encoder.pkl", "feature_cols.pkl"]
+                for fn in rf_files:
+                    p = os.path.join(MODEL_PATH, fn)
+                    if os.path.exists(p):
+                        shutil.copy2(p, os.path.join(rf_archive, fn))
+                for fn, obj in [("rf_model.pkl", rf_new),
+                                ("scaler.pkl", scaler),
+                                ("imputer.pkl", imputer),
+                                ("label_encoder.pkl", le),
+                                ("feature_cols.pkl", feature_cols)]:
+                    with open(os.path.join(MODEL_PATH, fn), "wb") as f:
+                        pickle.dump(obj, f)
+                log(f"  random_forest deployed ({size_mb:.0f}MB) — "
+                    f"incumbent archived")
+        else:
+            log("  random_forest incumbent retained")
+    except Exception as e:
+        log(f"  random_forest retrain failed ({e}) — incumbent kept")
 
     best_kind = max(roster_results, key=lambda k: roster_results[k][0])
     chal_f1, challenger = roster_results[best_kind]
