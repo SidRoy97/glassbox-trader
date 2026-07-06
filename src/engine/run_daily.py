@@ -104,6 +104,8 @@ def run_daily():
             sync_positions_table()
         except Exception as e:
             print(f"[paper] position sync failed: {e}")
+        from engine.performance import sync_performance
+        sync_performance()
     print(f"\ndaily run complete: {results}")
 
 
@@ -195,6 +197,9 @@ def weekly_review():
     performance_report()
     model_report()
     paper_report()
+    if enabled():
+        from engine.performance import sync_performance
+        sync_performance()
     tickers = get_recent_tickers(days=30) or WATCHLIST
     prices = latest_prices(tickers)
     review_theses(lambda t: (prices.get(t) or {}).get("ret_5d"))
