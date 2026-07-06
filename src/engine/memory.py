@@ -15,14 +15,15 @@ _client = None
 
 
 def get_client():
-    # creating the supabase client once and refusing to start without keys
+    # creating the supabase client once, preferring the server-only secret key
     global _client
     if _client is None:
         from supabase import create_client
         url = os.environ.get("SUPABASE_URL")
-        key = os.environ.get("SUPABASE_KEY")
+        key = os.environ.get("SUPABASE_SERVICE_KEY") \
+            or os.environ.get("SUPABASE_KEY")
         if not url or not key:
-            raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set")
+            raise RuntimeError("SUPABASE_URL and a supabase key must be set")
         _client = create_client(url, key)
     return _client
 
