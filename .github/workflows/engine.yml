@@ -2,9 +2,10 @@ name: engine
 
 on:
   schedule:
-    - cron: "30 12 * * 1-5"   # daily decisions, weekdays 12:30 UTC (pre-market ET)
-    - cron: "30 22 * * 1-5"   # outcome scoring, weekdays 22:30 UTC (after close ET)
-    - cron: "0 14 * * 6"      # weekly review, saturdays 14:00 UTC
+    - cron: "37 12 * * 1-5"   # daily decisions, weekdays ~12:37 UTC (off-peak minute)
+    - cron: "7 14 * * 1-5"    # catch-up daily, fires only if the first was dropped
+    - cron: "43 22 * * 1-5"   # outcome scoring, weekdays ~22:43 UTC (after close ET)
+    - cron: "13 14 * * 6"     # weekly review, saturdays ~14:13 UTC
   workflow_dispatch:
     inputs:
       mode:
@@ -17,7 +18,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -37,9 +38,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "30 12 * * 1-5" ]; then
+          elif [ "${{ github.event.schedule }}" = "37 12 * * 1-5" ]; then
             echo "mode=daily" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "30 22 * * 1-5" ]; then
+          elif [ "${{ github.event.schedule }}" = "7 14 * * 1-5" ]; then
+            echo "mode=daily" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "43 22 * * 1-5" ]; then
             echo "mode=score" >> "$GITHUB_OUTPUT"
           else
             echo "mode=weekly" >> "$GITHUB_OUTPUT"
@@ -47,6 +50,9 @@ jobs:
 
       - name: run engine
         env:
+          DEBATE_BUDGET: ${{ vars.DEBATE_BUDGET }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          EXPLORE_SLOTS: ${{ vars.EXPLORE_SLOTS }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
@@ -56,6 +62,15 @@ jobs:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           PAPER_TRADING: ${{ vars.PAPER_TRADING }}
+          DEBATE_BUDGET: ${{ vars.DEBATE_BUDGET }}
+          DEBATE_COOLDOWN_DAYS: ${{ vars.DEBATE_COOLDOWN_DAYS }}
+          EXPLORE_SLOTS: ${{ vars.EXPLORE_SLOTS }}
+          BULL_PANEL: ${{ vars.BULL_PANEL }}
+          BEAR_PANEL: ${{ vars.BEAR_PANEL }}
+          JUDGE_PANEL: ${{ vars.JUDGE_PANEL }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          MISTRAL_MODEL: ${{ vars.MISTRAL_MODEL }}
           TRADING_MODE: ${{ vars.TRADING_MODE }}
           LIVE_TRADING_CONFIRM: ${{ secrets.LIVE_TRADING_CONFIRM }}
           STOCK_LENS_BASE: ${{ github.workspace }}/stock-lens-data

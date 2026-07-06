@@ -82,6 +82,16 @@ def run_daily():
     if not is_trading_day():
         print("market holiday — skipping today's run")
         return
+
+    # exiting when today already ran, making catch-up crons safe
+    from datetime import date as _date
+    from engine.memory import get_client
+    already = get_client().table("decisions").select("id") \
+        .gte("decided_at", str(_date.today())).limit(1).execute().data
+    if already:
+        print("decisions already exist today — skipping duplicate run")
+        return
+
     if enabled():
         from engine.execution import trading_mode, base_url
         print(f"[exec] mode={trading_mode().upper()} endpoint={base_url()}")
@@ -92,7 +102,7 @@ def run_daily():
     watchlist, scan = select_watchlist(k=DEBATE_BUDGET, limit=limit,
                                        exclude=recently_debated)
     if scan:
-        save_screen_results(scan)
+        save_screen_results(scan, top_n=max(40, DEBATE_BUDGET + 10))
     print(f"debating today: {watchlist} "
           f"(excluded {len(recently_debated)} on cooldown)")
 
