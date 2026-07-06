@@ -31,9 +31,36 @@ def run_ticker(ticker):
     return action
 
 
+def market_summary():
+    # composing a factual market snapshot from index and volatility data
+    import yfinance as yf
+    parts = []
+    for name, sym in [("S&P 500", "SPY"), ("Nasdaq 100", "QQQ")]:
+        try:
+            closes = yf.download(sym, period="10d", auto_adjust=True,
+                                 progress=False)["Close"].squeeze()
+            d1 = closes.pct_change().iloc[-1] * 100
+            d5 = closes.pct_change(5).iloc[-1] * 100
+            parts.append(f"{name} {d1:+.1f}% last session, {d5:+.1f}% over 5 days")
+        except Exception:
+            continue
+    try:
+        vix = float(yf.download("^VIX", period="5d", auto_adjust=True,
+                                progress=False)["Close"].squeeze().iloc[-1])
+        mood = "calm" if vix < 15 else "elevated" if vix < 25 else "stressed"
+        parts.append(f"VIX at {vix:.1f} ({mood})")
+    except Exception:
+        pass
+    return "; ".join(parts) if parts else "market data unavailable"
+
+
 def run_daily():
     # looping the full watchlist each morning before market open
     started = datetime.now(timezone.utc).isoformat()
+
+    # writing today's real market snapshot before any debate reads it
+    upsert_market_context(market_summary())
+
     results = {}
     for ticker in WATCHLIST:
         try:
@@ -41,7 +68,6 @@ def run_daily():
         except Exception as e:
             print(f"{ticker} failed: {e}")
             results[ticker] = "ERROR"
-    upsert_market_context(f"run at {started}: {results}")
     print(f"\ndaily run complete: {results}")
 
 
