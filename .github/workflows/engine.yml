@@ -1,0 +1,58 @@
+name: engine
+
+on:
+  schedule:
+    - cron: "30 12 * * 1-5"   # daily decisions, weekdays 12:30 UTC (pre-market ET)
+    - cron: "30 22 * * 1-5"   # outcome scoring, weekdays 22:30 UTC (after close ET)
+    - cron: "0 14 * * 6"      # weekly review, saturdays 14:00 UTC
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "engine mode"
+        required: true
+        default: "daily"
+        type: choice
+        options: [daily, score, weekly]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: install cpu torch first to avoid the cuda bundle
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: install remaining dependencies
+        run: pip install -r requirements.txt
+
+      - name: resolve mode from trigger
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "30 12 * * 1-5" ]; then
+            echo "mode=daily" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "30 22 * * 1-5" ]; then
+            echo "mode=score" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=weekly" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: run engine
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          STOCK_LENS_BASE: ${{ github.workspace }}/stock-lens-data
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: python -m engine.run_daily --mode "${{ steps.mode.outputs.mode }}"
