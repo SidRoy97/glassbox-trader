@@ -43,13 +43,20 @@ def get_cnn_signal(ticker):
 
 def build_packet(ticker, news_items):
     # combining signal, news, history, lessons, thesis, and context
+    from engine.news_fetcher import fetch_next_earnings
     ticker = validate_ticker(ticker)
+    sentiments = [n.get("sentiment") for n in news_items[:5]
+                  if n.get("sentiment") is not None]
     packet = {
         "ticker": ticker,
         "cnn_signal": get_cnn_signal(ticker),
+        "days_to_earnings": fetch_next_earnings(ticker),
         "news": [{"headline": n["headline"][:200],
                   "summary": (n.get("summary") or "")[:300],
-                  "source": n.get("source", "")} for n in news_items[:5]],
+                  "source": n.get("source", ""),
+                  "sentiment": n.get("sentiment")} for n in news_items[:5]],
+        "news_sentiment_avg": round(sum(sentiments) / len(sentiments), 3)
+        if sentiments else None,
         "recent_decisions": get_recent_decisions(ticker, limit=5),
         "lessons": get_active_lessons(limit=8),
         "active_thesis": get_active_thesis(ticker),
