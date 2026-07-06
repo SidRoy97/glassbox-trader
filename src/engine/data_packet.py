@@ -101,6 +101,37 @@ def _structure_block(ticker):
         return None
 
 
+def _overnight_gap(ticker):
+    # measuring the move since the prior close using yahoo prepost prints
+    try:
+        import pandas as pd
+        import yfinance as yf
+        from datetime import date
+        sym = ticker.replace(".", "-")
+        daily = yf.download(sym, period="5d", auto_adjust=True,
+                            progress=False)
+        if daily is None or daily.empty:
+            return None
+        if isinstance(daily.columns, pd.MultiIndex):
+            daily.columns = daily.columns.get_level_values(0)
+        # anchoring on the last fully completed session before today
+        daily = daily[pd.to_datetime(daily.index).date < date.today()]
+        if daily.empty:
+            return None
+        prev_close = float(daily["Close"].iloc[-1])
+        intra = yf.download(sym, period="1d", interval="1m", prepost=True,
+                            progress=False)
+        if intra is None or intra.empty:
+            return None
+        if isinstance(intra.columns, pd.MultiIndex):
+            intra.columns = intra.columns.get_level_values(0)
+        last = float(intra["Close"].dropna().iloc[-1])
+        return round(last / prev_close - 1, 4)
+    except Exception as e:
+        print(f"  [gap] {ticker} unavailable: {e}")
+        return None
+
+
 def build_packet(ticker, news_items):
     # combining signal, structure, news, history, lessons, thesis, and context
     from engine.news_fetcher import fetch_next_earnings
@@ -111,6 +142,7 @@ def build_packet(ticker, news_items):
         "ticker": ticker,
         "cnn_signal": get_cnn_signal(ticker),
         "technical_structure": _structure_block(ticker),
+        "overnight_gap_pct": _overnight_gap(ticker),
         "days_to_earnings": fetch_next_earnings(ticker),
         "news": [{"headline": n["headline"][:200],
                   "summary": (n.get("summary") or "")[:300],

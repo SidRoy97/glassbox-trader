@@ -180,6 +180,31 @@ def run_daily():
     print(f"\ndaily run complete: {results}")
 
 
+def run_manage():
+    # trailing stops and enforcing exits without scanning or debating
+    if not is_trading_day():
+        print("market holiday — skipping midday management")
+        return
+    if not enabled():
+        print("trading disabled — nothing to manage")
+        return
+    try:
+        sync_positions_table()
+    except Exception as e:
+        print(f"[manage] position sync failed: {e}")
+    try:
+        moved = ratchet_stops()
+        print(f"[manage] ratcheted {len(moved)} stop(s)" if moved
+              else "[manage] no stops earned a move")
+    except Exception as e:
+        print(f"[manage] stop ratchet failed: {e}")
+    try:
+        manage_positions()
+    except Exception as e:
+        print(f"[manage] position management failed: {e}")
+    print("midday management complete")
+
+
 def latest_prices(tickers):
     # fetching latest closes and returns for scoring and thesis review
     import yfinance as yf
@@ -341,10 +366,12 @@ def weekly_review():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", default="daily",
-                        choices=["daily", "score", "weekly"])
+                        choices=["daily", "score", "weekly", "manage"])
     args = parser.parse_args()
     if args.mode == "daily":
         run_daily()
+    elif args.mode == "manage":
+        run_manage()
     elif args.mode == "score":
         score_outcomes()
         score_model_predictions()

@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: "37 12 * * 1-5"   # daily decisions, weekdays ~12:37 UTC (off-peak minute)
     - cron: "7 14 * * 1-5"    # catch-up daily, fires only if the first was dropped
+    - cron: "43 17 * * 1-5"   # midday stop management, ~1:43pm ET
     - cron: "43 22 * * 1-5"   # outcome scoring, weekdays ~22:43 UTC (after close ET)
     - cron: "13 14 * * 6"     # weekly review, saturdays ~14:13 UTC
   workflow_dispatch:
@@ -13,7 +14,7 @@ on:
         required: true
         default: "daily"
         type: choice
-        options: [daily, score, weekly]
+        options: [daily, score, weekly, manage]
 
 permissions:
   contents: read
@@ -52,6 +53,8 @@ jobs:
             echo "mode=daily" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "7 14 * * 1-5" ]; then
             echo "mode=daily" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "43 17 * * 1-5" ]; then
+            echo "mode=manage" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "43 22 * * 1-5" ]; then
             echo "mode=score" >> "$GITHUB_OUTPUT"
           else
