@@ -8,3 +8,7 @@ __pycache__/
 web/node_modules/
 web/.next/
 logs/
+
+.env
+.env.*
+web/.env.local
