@@ -215,6 +215,97 @@ def chandelier_exit(
     return out
 
 
+def _rsi(close: pd.Series, span: int = 14) -> pd.Series:
+    # computing wilder rsi for the divergence detector
+    delta = close.diff()
+    gain = delta.clip(lower=0).ewm(alpha=1 / span, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1 / span, adjust=False).mean()
+    rs = gain / loss.replace(0, np.nan)
+    return 100 - 100 / (1 + rs)
+
+
+def divergence_features(df: pd.DataFrame, window: int = SWING_WINDOW,
+                        recency: int = 40) -> pd.DataFrame:
+    # detecting rsi divergences only at pivots already confirmed by later bars
+    out = pd.DataFrame(index=df.index)
+    closes = df["close"].to_numpy()
+    highs = df["high"].to_numpy()
+    lows = df["low"].to_numpy()
+    rsi = _rsi(df["close"]).to_numpy()
+    n = len(df)
+
+    bull_since = np.full(n, np.nan)
+    bear_since = np.full(n, np.nan)
+    lo_pivots: list[tuple[int, float, float]] = []
+    hi_pivots: list[tuple[int, float, float]] = []
+    last_bull = -1
+    last_bear = -1
+
+    for i in range(n):
+        # confirming a pivot only once `window` later bars exist, so the
+        # divergence signal is attributed at confirmation time, never earlier
+        j = i - window
+        if j >= window:
+            seg_l = lows[j - window : j + window + 1]
+            seg_h = highs[j - window : j + window + 1]
+            if lows[j] == seg_l.min() and not np.isnan(rsi[j]):
+                if lo_pivots:
+                    pj, plow, prsi = lo_pivots[-1]
+                    # flagging bullish divergence: lower price low, higher rsi low
+                    if lows[j] < plow and rsi[j] > prsi and j - pj <= recency:
+                        last_bull = i
+                lo_pivots.append((j, lows[j], rsi[j]))
+                lo_pivots = lo_pivots[-3:]
+            if highs[j] == seg_h.max() and not np.isnan(rsi[j]):
+                if hi_pivots:
+                    pj, phigh, prsi = hi_pivots[-1]
+                    # flagging bearish divergence: higher price high, lower rsi high
+                    if highs[j] > phigh and rsi[j] < prsi and j - pj <= recency:
+                        last_bear = i
+                hi_pivots.append((j, highs[j], rsi[j]))
+                hi_pivots = hi_pivots[-3:]
+
+        if last_bull >= 0:
+            bull_since[i] = i - last_bull
+        if last_bear >= 0:
+            bear_since[i] = i - last_bear
+
+    out["bars_since_bull_divergence"] = bull_since
+    out["bars_since_bear_divergence"] = bear_since
+    out["bull_divergence_active"] = (np.nan_to_num(bull_since, nan=1e9)
+                                     <= 10).astype(int)
+    out["bear_divergence_active"] = (np.nan_to_num(bear_since, nan=1e9)
+                                     <= 10).astype(int)
+    return out
+
+
+def volume_profile_features(df: pd.DataFrame, lookback: int = 120,
+                            bins: int = 24) -> pd.DataFrame:
+    # approximating volume-at-price from daily bars by binning typical price
+    out = pd.DataFrame(index=df.index)
+    tp = ((df["high"] + df["low"] + df["close"]) / 3).to_numpy()
+    vol = df["volume"].to_numpy(dtype=float) if "volume" in df.columns \
+        else np.ones(len(df))
+    closes = df["close"].to_numpy()
+    atr = _atr(df).to_numpy()
+    n = len(df)
+
+    poc_dist = np.full(n, np.nan)
+    above_poc = np.full(n, np.nan)
+    for i in range(lookback, n):
+        w_tp = tp[i - lookback : i]
+        w_v = vol[i - lookback : i]
+        hist, edges = np.histogram(w_tp, bins=bins, weights=w_v)
+        poc = (edges[hist.argmax()] + edges[hist.argmax() + 1]) / 2
+        if atr[i] > 0:
+            poc_dist[i] = (closes[i] - poc) / atr[i]
+        above_poc[i] = 1.0 if closes[i] >= poc else 0.0
+
+    out["poc_dist_atr"] = poc_dist
+    out["above_poc"] = above_poc
+    return out
+
+
 def build_structure_features(df: pd.DataFrame) -> pd.DataFrame:
     """Concatenating all structure features on an OHLCV frame indexed by date."""
     parts = [
@@ -224,6 +315,8 @@ def build_structure_features(df: pd.DataFrame) -> pd.DataFrame:
         trend_strength(df),
         candle_anatomy(df),
         chandelier_exit(df),
+        divergence_features(df),
+        volume_profile_features(df),
     ]
     return pd.concat(parts, axis=1)
 
@@ -264,5 +357,8 @@ def technical_structure_block(df: pd.DataFrame) -> dict:
         "nearest_bearish_fvg_atr_above": _num("fvg_bear_dist_atr"),
         "momentum_asymmetry": _num("momentum_asymmetry"),
         "exhaustion_breakout_today": bool(last["exhaustion_breakout"]),
+        "bull_divergence_bars_ago": _num("bars_since_bull_divergence", 0),
+        "bear_divergence_bars_ago": _num("bars_since_bear_divergence", 0),
+        "close_vs_volume_poc_atr": _num("poc_dist_atr"),
         "chandelier_long_stop": _num("chandelier_long"),
     }
