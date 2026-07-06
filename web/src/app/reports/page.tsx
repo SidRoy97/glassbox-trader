@@ -33,6 +33,7 @@ export default async function Reports() {
         </div>
       )}
 
+      <h2 className="text-lg font-semibold mt-8">Weekly self-audits</h2>
       {reports.length === 0 ? (
         <p className="text-zinc-500 mt-8 text-sm">
           No reports yet — the first one is written on the next Saturday

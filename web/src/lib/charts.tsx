@@ -160,3 +160,50 @@ export function EquityCurve({ equity }:
     </ResponsiveContainer>
   );
 }
+
+export function ModelStandings({ data }:
+  { data: { model: string; rate: number; scored: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart data={data} layout="vertical" margin={{ left: 30 }}>
+        <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+        <XAxis type="number" domain={[0, 1]} stroke={TEXT} fontSize={11}
+               tickFormatter={(v) => `${Math.round(v * 100)}%`} />
+        <YAxis type="category" dataKey="model" stroke={TEXT} fontSize={11}
+               width={110} />
+        <Tooltip {...TOOLTIP}
+          formatter={(v: number, _n, item) =>
+            [`${(v * 100).toFixed(1)}% of ${item.payload.scored}`, "hit rate"]} />
+        <ReferenceLine x={0.333} stroke="#f43f5e" strokeDasharray="4 4" />
+        <Bar dataKey="rate" name="hit rate">
+          {data.map((d, i) => (
+            <Cell key={d.model}
+                  fill={TICKER_COLORS[i % TICKER_COLORS.length]} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+export function ModelRaceLines({ data, models }:
+  { data: Record<string, string | number>[]; models: string[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <LineChart data={data}>
+        <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+        <XAxis dataKey="date" stroke={TEXT} fontSize={11} />
+        <YAxis domain={[0, 1]} stroke={TEXT} fontSize={11}
+               tickFormatter={(v) => `${Math.round(v * 100)}%`} />
+        <Tooltip {...TOOLTIP} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <ReferenceLine y={0.333} stroke="#f43f5e" strokeDasharray="4 4" />
+        {models.map((m, i) => (
+          <Line key={m} type="monotone" dataKey={m} connectNulls
+                stroke={TICKER_COLORS[i % TICKER_COLORS.length]}
+                strokeWidth={2} dot={false} />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}

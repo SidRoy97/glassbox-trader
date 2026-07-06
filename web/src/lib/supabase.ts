@@ -66,3 +66,9 @@ export interface WeeklyReport {
     new_lessons: string[]; equity?: number; last_equity?: number;
   };
 }
+
+export interface ModelPred {
+  pred_date: string; ticker: string; model: string;
+  direction: string; confidence: number;
+  outcome_label: string | null; was_correct: boolean | null;
+}

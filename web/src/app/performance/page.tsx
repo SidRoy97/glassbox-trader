@@ -2,6 +2,7 @@
 import { supabase, EquityPoint, Trade } from "@/lib/supabase";
 import { Disclaimer, ModeBanner, StatCard } from "@/lib/ui";
 import { EquityCurve } from "@/lib/charts";
+import DownloadCsvButton from "@/lib/download";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,11 @@ export default async function Performance() {
         </p>
       )}
 
-      <h2 className="text-lg font-semibold mt-8">Closed trades</h2>
+      <div className="flex items-center justify-between mt-8">
+        <h2 className="text-lg font-semibold">Closed trades</h2>
+        <DownloadCsvButton rows={trades as unknown as Record<string, unknown>[]}
+          filename="glassbox_trades.csv" label="download trades CSV" />
+      </div>
       {trades.length === 0 ? (
         <p className="text-zinc-500 mt-2 text-sm">
           No closed trades yet — a trade closes when its stop, target, or a

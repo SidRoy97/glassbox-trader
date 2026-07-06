@@ -3,6 +3,7 @@ import Link from "next/link";
 import { supabase, Decision } from "@/lib/supabase";
 import { ActionBadge, Disclaimer, StatCard } from "@/lib/ui";
 import { CumulativeAccuracy, TickerAccuracyBar, ActionPie } from "@/lib/charts";
+import DownloadCsvButton from "@/lib/download";
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +71,21 @@ export default async function Track() {
         <TickerAccuracyBar data={tickerData} />
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden mt-6">
+      <div className="flex justify-end mt-6">
+        <DownloadCsvButton
+          rows={rows.map((r) => ({
+            date: r.decided_at.slice(0, 10), ticker: r.ticker,
+            action: r.action, cnn_direction: r.cnn_direction,
+            cnn_confidence: r.cnn_confidence,
+            outcome: r.outcome_label,
+            return_1d: r.outcome_return_1d,
+            result: r.action === "NO_TRADE" && !r.was_correct
+              ? "missed" : r.was_correct ? "correct" : "wrong",
+          }))}
+          filename="glassbox_track_record.csv"
+          label="download track record CSV" />
+      </div>
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden mt-3">
         <table className="w-full text-sm">
           <thead className="bg-zinc-800/50 text-zinc-400">
             <tr>
