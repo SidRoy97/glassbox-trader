@@ -31,6 +31,7 @@ def _envint(name, default):
 
 DEBATE_BUDGET = _envint("DEBATE_BUDGET", 10)
 DEBATE_COOLDOWN_DAYS = _envint("DEBATE_COOLDOWN_DAYS", 2)
+DEBATE_PAUSE_SEC = _envint("DEBATE_PAUSE_SEC", 20)
 SCAN_LIMIT = os.environ.get("SCAN_LIMIT")   # optional ticker cap for testing
 WATCHLIST = ["AAPL", "MSFT", "GOOGL", "NVDA", "JPM"]   # fallback only
 
@@ -114,14 +115,18 @@ def run_daily():
     print(f"debating today: {watchlist} "
           f"(excluded {len(recently_debated)} on cooldown)")
 
+    import time
     results = {}
-    for ticker in watchlist:
+    for i, ticker in enumerate(watchlist):
         try:
             results[ticker] = run_ticker(ticker)
             record_predictions(ticker)
         except Exception as e:
             print(f"{ticker} failed: {e}")
             results[ticker] = "ERROR"
+        # pausing between debates to stay under per-minute rate limits
+        if i < len(watchlist) - 1:
+            time.sleep(DEBATE_PAUSE_SEC)
     if enabled():
         try:
             sync_positions_table()
