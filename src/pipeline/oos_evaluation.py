@@ -13,7 +13,7 @@ from pipeline.enhanced_features import add_lags, add_returns
 from inference.predictors import load_seq_predictor, load_rf_predictor
 
 
-def prepare_oos_frame(limit=None):
+def prepare_oos_frame(limit=None, start=OOS_START, end=OOS_END):
     # downloading yfinance data and rebuilding the training feature pipeline
     import yfinance as yf
     securities = pd.read_csv(os.path.join(DATA_PATH, "securities.csv"),
@@ -25,8 +25,9 @@ def prepare_oos_frame(limit=None):
         tickers = tickers[:limit]
     yf_map = {t: t.replace(".", "-") for t in tickers}
 
-    log(f"downloading {len(tickers)} tickers from yfinance...")
-    raw = yf.download(list(yf_map.values()), start=OOS_START, end=OOS_END,
+    log(f"downloading {len(tickers)} tickers from yfinance "
+        f"({start} to {end})...")
+    raw = yf.download(list(yf_map.values()), start=start, end=end,
                       group_by="ticker", auto_adjust=True, progress=False,
                       threads=True)
     frames = []
