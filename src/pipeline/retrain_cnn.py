@@ -16,7 +16,7 @@ from pipeline.sequence_models import (build_sequences, train_eval_seq,
                                       score_seq_model)
 from inference.predictors import load_seq_predictor
 
-TRAIL_YEARS = 4          # training on this many trailing years of data
+TRAIL_YEARS = 5          # training on this many trailing years of data
 EVAL_DAYS = 60           # holding out this many recent days for the gate
 WARMUP_DAYS = 120        # padding the download so indicators have history
 
