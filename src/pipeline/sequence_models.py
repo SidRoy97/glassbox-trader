@@ -10,7 +10,7 @@ from core.config import (DATA_PATH, MODEL_PATH, OBS_PATH, SEQ_WINDOW, SEQ_EPOCHS
                     SEQ_BATCH, SEQ_THRESHOLD, PER_STOCK_SAMPLE,
                     TRAIN_END, VAL_END)
 from core.helpers import log, save_plot, section
-from pipeline.experiments import enhanced_feature_cols
+from experiments import enhanced_feature_cols
 
 
 def build_sequences(frame, feature_cols, window=SEQ_WINDOW):
@@ -104,15 +104,19 @@ def make_torch_model(kind, n_features, head, window=SEQ_WINDOW):
 
 
 def train_eval_seq(kind, head, Xtr, ytr_reg, ytr_cls, Xva, yva_cls,
-                   return_model=False):
+                   return_model=False, class_weights=None):
     # training one architecture and returning validation macro-f1
     import torch
     import torch.nn as nn
     from sklearn.metrics import f1_score
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = make_torch_model(kind, Xtr.shape[2], head).to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    loss_fn = nn.MSELoss() if head == "regression" else nn.CrossEntropyLoss()
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    weights = None
+    if class_weights is not None and head == "classification":
+        weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
+    loss_fn = nn.MSELoss() if head == "regression" \
+        else nn.CrossEntropyLoss(weight=weights)
     Xtr_t = torch.tensor(Xtr)
     ytr_t = torch.tensor(ytr_reg if head == "regression" else ytr_cls)
     if head == "regression":

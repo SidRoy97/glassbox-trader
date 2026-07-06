@@ -90,6 +90,12 @@ def retrain(limit=None):
     eval_scaled[feature_cols] = scaler.transform(eval_scaled[feature_cols])
     Xe, _, ye = build_sequences(eval_scaled, feature_cols)
 
+    # weighting classes inversely to frequency so neutral cannot dominate
+    counts = np.bincount(ctr, minlength=3).astype(float)
+    class_weights = (counts.sum() / (3 * np.maximum(counts, 1))).tolist()
+    log(f"class weights (Down/Neutral/Up): "
+        f"{[round(w, 2) for w in class_weights]}")
+
     roster_results = {}
     shadow_dir = os.path.join(MODEL_PATH, "shadow")
     for kind in ROSTER:
@@ -97,7 +103,8 @@ def retrain(limit=None):
         try:
             val_f1, model = train_eval_seq(kind, "classification",
                                            Xtr, rtr, ctr, Xva, cva,
-                                           return_model=True)
+                                           return_model=True,
+                                           class_weights=class_weights)
             f1, _ = score_seq_model(model, "classification", Xe, ye)
             roster_results[kind] = (f1, model)
             log(f"  {kind}: val {val_f1:.4f} | eval {f1:.4f}")
@@ -130,7 +137,10 @@ def retrain(limit=None):
                             learning_rate=0.08, subsample=0.8,
                             colsample_bytree=0.8, eval_metric="mlogloss",
                             n_jobs=4)
+        from sklearn.utils.class_weight import compute_sample_weight
         xgb.fit(train[feature_cols], train["true_label"].map(label_map),
+                sample_weight=compute_sample_weight(
+                    "balanced", train["true_label"]),
                 eval_set=[(val[feature_cols],
                            val["true_label"].map(label_map))],
                 verbose=False)
@@ -157,6 +167,7 @@ def retrain(limit=None):
         imputer = SimpleImputer(strategy="median").fit(train[feature_cols])
         rf_new = RandomForestClassifier(n_estimators=180, max_depth=16,
                                         min_samples_leaf=5, n_jobs=-1,
+                                        class_weight="balanced_subsample",
                                         random_state=42)
         rf_new.fit(imputer.transform(train[feature_cols]),
                    le.transform(train["true_label"]))
@@ -244,7 +255,8 @@ def retrain(limit=None):
     fit_scaled[feature_cols] = deploy_scaler.transform(fit_scaled[feature_cols])
     aX, ar, ac = build_sequences(fit_scaled, feature_cols)
     _, deploy_model = train_eval_seq(best_kind, "classification",
-                                     aX, ar, ac, aX, ac, return_model=True)
+                                     aX, ar, ac, aX, ac, return_model=True,
+                                     class_weights=class_weights)
     torch.save(deploy_model.state_dict(),
                os.path.join(MODEL_PATH, "seq_model.pt"))
     with open(os.path.join(MODEL_PATH, "seq_meta.pkl"), "wb") as f:
