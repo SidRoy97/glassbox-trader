@@ -152,3 +152,17 @@ def paper_report():
               f"unrealized {float(p['unrealized_pl']):+,.2f}")
     if not positions:
         print("  no open positions")
+
+
+def is_trading_day():
+    # asking alpaca whether the market opens at all today
+    if not (os.environ.get("ALPACA_API_KEY")
+            and os.environ.get("ALPACA_SECRET_KEY")):
+        return True
+    try:
+        from datetime import date
+        today = str(date.today())
+        cal = _get(f"/calendar?start={today}&end={today}")
+        return bool(cal)
+    except Exception:
+        return True
