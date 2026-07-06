@@ -5,6 +5,7 @@ from engine.memory import get_client, get_active_thesis
 MAX_POSITION_FRACTION = 0.10     # limiting any single position to 10% of capital
 MAX_DAILY_TRADES = 3             # capping new trades per day
 MIN_JUDGE_CONFIDENCE = 0.5       # requiring average judge conviction to act
+MIN_JUDGE_QUORUM = 2            # refusing action on a single judge's vote
 
 
 def count_trades_today():
@@ -23,6 +24,11 @@ def apply_gate(ticker, verdict):
     # blocking any action when judges did not respond
     if decision != "NO_TRADE" and not votes:
         return "NO_TRADE", "gate: no judge votes received"
+
+    # blocking any action decided by fewer judges than the quorum
+    if decision != "NO_TRADE" and len(votes) < MIN_JUDGE_QUORUM:
+        return "NO_TRADE", (f"gate: only {len(votes)} judge vote(s) — "
+                            f"quorum is {MIN_JUDGE_QUORUM}")
 
     # blocking low-conviction actions
     if decision != "NO_TRADE":
