@@ -17,6 +17,7 @@ const NAV = [
   ["/reports", "Reports"],
   ["/insights", "Insights"],
   ["/positions", "Positions"],
+  ["/watchlist", "Watchlist"],
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
