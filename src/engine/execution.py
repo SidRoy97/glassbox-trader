@@ -162,16 +162,38 @@ def _place_bracket(ticker, qty, target, stop):
     return r.json()
 
 
-def _cancel_open_orders(symbol):
-    # cancelling every open order on one symbol so the position can close
-    orders = _get(f"/orders?status=open&symbols={symbol}&limit=100")
+def _live_orders(symbol):
+    # flattening every order and nested leg still in a cancellable state
+    orders = _get(f"/orders?status=all&symbols={symbol}"
+                  f"&limit=100&nested=true")
+    flat = []
     for o in orders:
+        flat.append(o)
+        flat.extend(o.get("legs") or [])
+    live = ("new", "accepted", "held", "partially_filled",
+            "pending_new", "accepted_for_bidding")
+    return [o for o in flat if o.get("status") in live]
+
+
+def _open_stop_orders(symbol):
+    # listing live protective stop legs, which status=open hides when held
+    return [{"id": o["id"], "stop_price": o["stop_price"]}
+            for o in _live_orders(symbol)
+            if o.get("type") in ("stop", "stop_limit")
+            and o.get("side") == "sell" and o.get("stop_price")]
+
+
+def _cancel_open_orders(symbol):
+    # cancelling every live order on one symbol so the position can close
+    cancelled = 0
+    for o in _live_orders(symbol):
         try:
             requests.delete(f"{base_url()}/orders/{o['id']}",
                             headers=_headers(), timeout=20).raise_for_status()
+            cancelled += 1
         except Exception as e:
             print(f"  [paper] {symbol}: cancel {o['id'][:8]} failed: {e}")
-    return len(orders)
+    return cancelled
 
 
 def maybe_exit(ticker):
@@ -189,22 +211,6 @@ def maybe_exit(ticker):
     r.raise_for_status()
     print(f"  [paper] {ticker}: position closed on SELL vote")
     return f"{ticker}: closed"
-
-
-def _open_stop_orders(symbol):
-    # listing open protective stop legs, including ones nested under parents
-    orders = _get(f"/orders?status=open&symbols={symbol}"
-                  f"&limit=100&nested=true")
-    flat = []
-    for o in orders:
-        flat.append(o)
-        flat.extend(o.get("legs") or [])
-    live = ("new", "accepted", "held", "partially_filled")
-    return [{"id": o["id"], "stop_price": o["stop_price"]}
-            for o in flat
-            if o.get("type") in ("stop", "stop_limit")
-            and o.get("side") == "sell" and o.get("stop_price")
-            and o.get("status") in live]
 
 
 def _replace_stop(order_id, stop_price):
