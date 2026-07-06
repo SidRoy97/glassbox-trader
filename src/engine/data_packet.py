@@ -29,12 +29,16 @@ def get_cnn_signal(ticker):
         out = seq["model"](torch.tensor(win).unsqueeze(0)).numpy().squeeze()
     probs = np.exp(out) / np.exp(out).sum()
     idx = int(probs.argmax())
+    latest = df.iloc[-1]
     return {"direction": meta["classes"][idx],
             "confidence": round(float(probs[idx]), 4),
-            "close": round(float(df["close"].iloc[-1]), 2),
-            "rsi": round(float(df["rsi"].iloc[-1]), 1),
-            "return_5d": round(float(df["return_5d"].iloc[-1]), 4),
-            "rel_to_sector": round(float(df["rel_to_sector"].iloc[-1]), 4)}
+            "close": round(float(latest["close"]), 2),
+            "rsi": round(float(latest["rsi"]), 1),
+            "return_5d": round(float(latest["return_5d"]), 4),
+            "return_10d": round(float(latest["return_10d"]), 4),
+            "pct_vs_ma50": round(float(latest["close"] / latest["ma50"] - 1), 4),
+            "vol_ratio": round(float(latest["vol_ratio"]), 2),
+            "rel_to_sector": round(float(latest["rel_to_sector"]), 4)}
 
 
 def build_packet(ticker, news_items):
