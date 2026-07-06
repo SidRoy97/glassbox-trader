@@ -5,3 +5,5 @@ stock-lens-data/data/*.csv
 .env
 .DS_Store
 __pycache__/
+web/node_modules/
+web/.next/
