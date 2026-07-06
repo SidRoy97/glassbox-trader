@@ -241,7 +241,7 @@ def retrain(limit=None):
         return
 
     # archiving old artifacts before deploying the challenger
-        archive = os.path.join(MODEL_PATH, "archive", str(date.today()))
+    archive = os.path.join(MODEL_PATH, "archive", str(date.today()))
     os.makedirs(archive, exist_ok=True)
     for fn in ("seq_model.pt", "seq_meta.pkl", "seq_scaler.pkl"):
         src_path = os.path.join(MODEL_PATH, fn)
