@@ -60,37 +60,39 @@ PROVIDERS = {"gemini": ask_gemini, "groq": ask_groq, "mistral": ask_mistral}
 
 
 _consecutive_failures = {}
+_circuit_opened_at = {}
+CIRCUIT_THRESHOLD = 3        # opening the circuit after this many strikeouts
+CIRCUIT_COOLDOWN = 120       # allowing a single probe call after this long
 
 
 def ask(provider, prompt):
-    # routing one prompt with retry, logging, and a per-run circuit breaker
+    # routing one prompt with 429-aware backoff and a half-open circuit
+    # breaker that probes for recovery instead of staying dark all run
     import time
-    if _consecutive_failures.get(provider, 0) >= 3:
-        print(f"  [llm] {provider} circuit open — skipping for this run")
-        return None
-    for attempt in (1, 2):
+    probing = False
+    if _consecutive_failures.get(provider, 0) >= CIRCUIT_THRESHOLD:
+        if time.time() - _circuit_opened_at.get(provider, 0) < CIRCUIT_COOLDOWN:
+            print(f"  [llm] {provider} circuit open — skipping")
+            return None
+        probing = True
+        print(f"  [llm] {provider} circuit half-open — probing for recovery")
+
+    attempts = (1,) if probing else (1, 2, 3)
+    for attempt in attempts:
         try:
             reply = PROVIDERS[provider](prompt)
+            if _consecutive_failures.get(provider, 0) >= CIRCUIT_THRESHOLD:
+                print(f"  [llm] {provider} recovered — circuit closed")
             _consecutive_failures[provider] = 0
             return reply
         except Exception as e:
+            status = getattr(getattr(e, "response", None),
+                             "status_code", None)
             print(f"  [llm] {provider} attempt {attempt} failed: {e}")
-            time.sleep(3)
-    _consecutive_failures[provider] =         _consecutive_failures.get(provider, 0) + 1
+            if attempt < attempts[-1]:
+                # waiting out a rate-limit window instead of burning strikes
+                time.sleep(20 if status == 429 else 4)
+    _consecutive_failures[provider] = \
+        _consecutive_failures.get(provider, 0) + 1
+    _circuit_opened_at[provider] = time.time()
     return None
-
-
-def parse_json_reply(text, required_keys):
-    # extracting and validating strict json from an llm reply
-    if not text:
-        return None
-    try:
-        start, end = text.find("{"), text.rfind("}")
-        if start == -1 or end == -1:
-            return None
-        obj = json.loads(text[start:end + 1])
-        if not all(k in obj for k in required_keys):
-            return None
-        return obj
-    except (json.JSONDecodeError, TypeError):
-        return None
