@@ -106,6 +106,12 @@ def run_rebuttal(packet, stance, panel, opposing_cases):
 
 def run_judges(packet, bull, bear, bull_reb, bear_reb):
     # collecting independent votes, each judge seat from a distinct provider
+    # dropping both rebuttals when either side's is missing, so an outage
+    # can never hand one side the last word before the vote
+    if bool(bull_reb) != bool(bear_reb):
+        print("  [panel] asymmetric rebuttals — judging on opening "
+              "cases only")
+        bull_reb, bear_reb = [], []
     prompt = _judge_prompt(packet, bull, bear, bull_reb, bear_reb)
     votes, used = [], set()
     for provider in JUDGE_PANEL:
