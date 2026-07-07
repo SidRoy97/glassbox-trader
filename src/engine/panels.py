@@ -88,6 +88,9 @@ def run_cases(packet, stance, panel):
         reply = _seat_reply(prompt, provider, used, CASE_SCHEMA)
         if reply:
             cases.append(reply)
+    if not cases:
+        print(f"  [panel] WARNING: no {stance} cases produced — "
+              f"all providers failed this stage")
     return cases
 
 
@@ -95,6 +98,9 @@ def run_rebuttal(packet, stance, panel, opposing_cases):
     # collecting one rebuttal, falling back past a dead preferred provider
     prompt = _rebuttal_prompt(packet, stance, opposing_cases)
     reply = _seat_reply(prompt, panel[0], set(), CASE_SCHEMA)
+    if not reply:
+        print(f"  [panel] no {stance} rebuttal produced — "
+              f"continuing without one")
     return [reply] if reply else []
 
 
