@@ -2,7 +2,12 @@
 import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost";
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "anon";
+// server-side reads use the service key (server components only — never
+// bundled to the browser); anon key remains as a harmless fallback
+const key =
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "anon";
 
 export const supabase = createClient(url, key);
 
