@@ -94,7 +94,7 @@ def _structure_block(ticker):
         # flattening the multiindex newer yfinance returns for single tickers
         if isinstance(hist.columns, pd.MultiIndex):
             hist.columns = hist.columns.get_level_values(0)
-        df = hist.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
+        df = hist.rename(columns=str.lower)[["open", "high", "low", "close"]]
         return technical_structure_block(df)
     except Exception as e:
         print(f"  [structure] {ticker} block unavailable: {e}")
@@ -132,6 +132,16 @@ def _overnight_gap(ticker):
         return None
 
 
+def _insider_block(ticker):
+    # attaching recent insider filing evidence, tolerating any failure
+    try:
+        from engine.smart_money import insider_activity
+        return insider_activity(ticker)
+    except Exception as e:
+        print(f"  [insider] block failed for {ticker}: {e}")
+        return None
+
+
 def build_packet(ticker, news_items):
     # combining signal, structure, news, history, lessons, thesis, and context
     from engine.news_fetcher import fetch_next_earnings
@@ -143,6 +153,7 @@ def build_packet(ticker, news_items):
         "cnn_signal": get_cnn_signal(ticker),
         "technical_structure": _structure_block(ticker),
         "overnight_gap_pct": _overnight_gap(ticker),
+        "insider_activity": _insider_block(ticker),
         "days_to_earnings": fetch_next_earnings(ticker),
         "news": [{"headline": n["headline"][:200],
                   "summary": (n.get("summary") or "")[:300],
