@@ -1,7 +1,10 @@
 """grading each evidence concept by the scored outcomes of calls citing it"""
 
 import json
+from datetime import date
 from engine.memory import get_client
+
+SHRINK = 10                  # prior weight pulling small samples to baseline
 
 WINDOW = 500                 # judging over the most recent scored decisions
 MIN_CITATIONS = 5            # hiding buckets with too little evidence
@@ -82,17 +85,60 @@ def evidence_report():
 
     base_n = len(rows)
     base_hit = sum(1 for r in rows if r["was_correct"]) / base_n
+
+    # loading the snapshot from roughly four weeks ago for the trend column
+    prior = {}
+    try:
+        old = get_client().table("evidence_stats") \
+            .select("concept,hit_rate,week_ending") \
+            .lte("week_ending", str(date.today())) \
+            .order("week_ending", desc=True).limit(200).execute().data or []
+        weeks = sorted({r["week_ending"] for r in old}, reverse=True)
+        if len(weeks) >= 4:
+            target = weeks[3]
+            prior = {r["concept"]: float(r["hit_rate"])
+                     for r in old if r["week_ending"] == target}
+    except Exception:
+        pass
+
+    # ranking by baseline-shrunk edge so thin samples cannot top the table
+    def score(hits, n):
+        return (hits + base_hit * SHRINK) / (n + SHRINK) - base_hit
+
     print(f"\nevidence effectiveness — {base_n} scored directional calls, "
           f"baseline hit rate {base_hit:.0%}")
-    print(f"{'concept':<24} {'cited':>6} {'hit rate':>9}  vs baseline")
+    print(f"{'concept':<24} {'cited':>6} {'hit rate':>9} "
+          f"{'edge*':>7} {'4wk trend':>10}")
     shown = 0
-    for name, (hits, n) in sorted(stats.items(), key=lambda kv: -kv[1][1]):
+    snapshot = []
+    for name, (hits, n) in sorted(stats.items(),
+                                  key=lambda kv: -score(*kv[1])):
         if n < MIN_CITATIONS:
             continue
         rate = hits / n
-        edge = rate - base_hit
-        print(f"{name:<24} {n:>6} {rate:>8.0%}  {edge:+.0%}")
+        trend = ""
+        if name in prior:
+            d = rate - prior[name]
+            trend = f"{d:+.0%}"
+        print(f"{name:<24} {n:>6} {rate:>8.0%} {score(hits, n):>+6.0%} "
+              f"{trend:>10}")
         shown += 1
     if not shown:
         print("no concept has enough citations yet — check back next week")
-    return {k: (h / n, n) for k, (h, n) in stats.items() if n >= MIN_CITATIONS}
+    print("(*edge shrunk toward baseline; rankings stabilise as n grows)")
+
+    # persisting this week's snapshot so the time series accumulates
+    try:
+        week = str(date.today())
+        for name, (hits, n) in stats.items():
+            get_client().table("evidence_stats").upsert(
+                {"week_ending": week, "concept": name, "cited": n,
+                 "hits": hits, "hit_rate": round(hits / n, 4),
+                 "baseline": round(base_hit, 4)},
+                on_conflict="week_ending,concept").execute()
+        print(f"snapshot stored for week ending {week}")
+    except Exception as e:
+        print(f"snapshot store failed: {e}")
+
+    return {k: (h / n, n) for k, (h, n) in stats.items()
+            if n >= MIN_CITATIONS}
