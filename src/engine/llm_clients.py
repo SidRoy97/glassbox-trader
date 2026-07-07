@@ -96,3 +96,19 @@ def ask(provider, prompt):
         _consecutive_failures.get(provider, 0) + 1
     _circuit_opened_at[provider] = time.time()
     return None
+
+
+def parse_json_reply(text, required_keys):
+    # extracting and validating strict json from an llm reply
+    if not text:
+        return None
+    try:
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end == -1:
+            return None
+        obj = json.loads(text[start:end + 1])
+        if not all(k in obj for k in required_keys):
+            return None
+        return obj
+    except (json.JSONDecodeError, TypeError):
+        return None
