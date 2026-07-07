@@ -25,7 +25,7 @@ ATR_SPAN = 22
 SWING_WINDOW = 5
 CHANDELIER_MULT = 3.0
 
-STRUCTURE_FEATURE_VERSION = "ta_structure_v3"
+STRUCTURE_FEATURE_VERSION = "ta_structure_v3.1"
 
 
 def _atr(df: pd.DataFrame, span: int = ATR_SPAN) -> pd.Series:
@@ -446,6 +446,13 @@ def trend_volume_extras(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(index=df.index)
     ema200 = df["close"].ewm(span=200, adjust=False).mean()
     out["above_ema200"] = (df["close"] > ema200).astype(int)
+    out["ema200_slope"] = ema200.diff(20)
+
+    # flagging the connors-style setup: deep short-term fear in an uptrend
+    rsi2 = _rsi(df["close"], span=2)
+    out["rsi2"] = rsi2
+    out["connors_pullback_long"] = ((df["close"] > ema200)
+                                    & (rsi2 < 10)).astype(int)
     if "volume" in df.columns:
         v5 = df["volume"].rolling(5, min_periods=5).mean()
         v20 = df["volume"].rolling(20, min_periods=20).mean()
@@ -478,6 +485,20 @@ def build_structure_features(df: pd.DataFrame) -> pd.DataFrame:
 def latest_chandelier_long(df: pd.DataFrame) -> float:
     """Returning the current long trailing stop for the executor's ratchet."""
     return float(chandelier_exit(df)["chandelier_long"].iloc[-1])
+
+
+def _market_stage(last) -> str:
+    # naming the weinstein stage from long-term regime, slope, and ranging
+    above = bool(last["above_ema200"])
+    rising = (last["ema200_slope"] or 0) > 0
+    ranging = bool(last["ranging"])
+    if above and rising and not ranging:
+        return "stage 2 (advancing)"
+    if not above and not rising and not ranging:
+        return "stage 4 (declining)"
+    if above:
+        return "stage 3 (distribution — uptrend stalling)"
+    return "stage 1 (accumulation — downtrend basing)"
 
 
 def technical_structure_block(df: pd.DataFrame) -> dict:
@@ -525,6 +546,9 @@ def technical_structure_block(df: pd.DataFrame) -> dict:
         "position_in_range_pct": _num("position_in_range"),
         "bb_squeeze_active": bool(last["bb_squeeze"]),
         "above_200ema": bool(last["above_ema200"]),
+        "market_stage": _market_stage(last),
+        "rsi2": _num("rsi2"),
+        "connors_pullback_setup": bool(last["connors_pullback_long"]),
         "volume_trend": ("rising" if (last["volume_osc"] or 0) > 0.05
                          else "falling"
                          if (last["volume_osc"] or 0) < -0.05 else "flat")
