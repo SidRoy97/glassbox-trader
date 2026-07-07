@@ -25,7 +25,7 @@ ATR_SPAN = 22
 SWING_WINDOW = 5
 CHANDELIER_MULT = 3.0
 
-STRUCTURE_FEATURE_VERSION = "ta_structure_v3.1"
+STRUCTURE_FEATURE_VERSION = "ta_structure_v3.2"
 
 
 def _atr(df: pd.DataFrame, span: int = ATR_SPAN) -> pd.Series:
@@ -441,6 +441,17 @@ def range_regime(df: pd.DataFrame, lookback: int = 40,
     return out
 
 
+def inside_bars(df: pd.DataFrame) -> pd.DataFrame:
+    # flagging bars contained by the prior bar's range, and coiling streaks
+    out = pd.DataFrame(index=df.index)
+    ib = ((df["high"] < df["high"].shift(1))
+          & (df["low"] > df["low"].shift(1))).astype(int)
+    out["inside_bar"] = ib
+    grp = (ib == 0).cumsum()
+    out["inside_bar_streak"] = ib.groupby(grp).cumsum()
+    return out
+
+
 def trend_volume_extras(df: pd.DataFrame) -> pd.DataFrame:
     # adding the long-term 200 ema regime and a fast/slow volume oscillator
     out = pd.DataFrame(index=df.index)
@@ -477,6 +488,7 @@ def build_structure_features(df: pd.DataFrame) -> pd.DataFrame:
         vix_fix(df),
         first_pullback(df),
         range_regime(df),
+        inside_bars(df),
         trend_volume_extras(df),
     ]
     return pd.concat(parts, axis=1)
@@ -545,6 +557,7 @@ def technical_structure_block(df: pd.DataFrame) -> dict:
         "ranging_market": bool(last["ranging"]),
         "position_in_range_pct": _num("position_in_range"),
         "bb_squeeze_active": bool(last["bb_squeeze"]),
+        "inside_bar_streak": int(last["inside_bar_streak"] or 0),
         "above_200ema": bool(last["above_ema200"]),
         "market_stage": _market_stage(last),
         "rsi2": _num("rsi2"),
