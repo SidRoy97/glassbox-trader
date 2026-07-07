@@ -25,7 +25,7 @@ ATR_SPAN = 22
 SWING_WINDOW = 5
 CHANDELIER_MULT = 3.0
 
-STRUCTURE_FEATURE_VERSION = "ta_structure_v1"
+STRUCTURE_FEATURE_VERSION = "ta_structure_v3"
 
 
 def _atr(df: pd.DataFrame, span: int = ATR_SPAN) -> pd.Series:
@@ -306,6 +306,155 @@ def volume_profile_features(df: pd.DataFrame, lookback: int = 120,
     return out
 
 
+def liquidity_sweeps(df: pd.DataFrame, window: int = SWING_WINDOW,
+                     tol_atr: float = 0.25, memory: int = 60) -> pd.DataFrame:
+    # flagging stop-hunt sweeps: equal-level clusters wicked through and reclaimed
+    out = pd.DataFrame(index=df.index)
+    highs = df["high"].to_numpy()
+    lows = df["low"].to_numpy()
+    closes = df["close"].to_numpy()
+    atr = _atr(df).to_numpy()
+    n = len(df)
+
+    lo_pivots: list[tuple[int, float]] = []
+    hi_pivots: list[tuple[int, float]] = []
+    lo_levels: list[tuple[int, float]] = []
+    hi_levels: list[tuple[int, float]] = []
+    bull_since = np.full(n, np.nan)
+    bear_since = np.full(n, np.nan)
+    last_bull = -1
+    last_bear = -1
+
+    for i in range(n):
+        # confirming pivots only after `window` later bars exist
+        j = i - window
+        if j >= window and atr[i] > 0:
+            if lows[j] == lows[j - window : j + window + 1].min():
+                # pairing near-equal lows into a resting-liquidity level
+                for pj, plow in lo_pivots:
+                    if i - pj <= memory and abs(lows[j] - plow) <=                             tol_atr * atr[i]:
+                        lo_levels.append((i, min(lows[j], plow)))
+                lo_pivots.append((j, lows[j]))
+                lo_pivots = lo_pivots[-6:]
+            if highs[j] == highs[j - window : j + window + 1].max():
+                for pj, phigh in hi_pivots:
+                    if i - pj <= memory and abs(highs[j] - phigh) <=                             tol_atr * atr[i]:
+                        hi_levels.append((i, max(highs[j], phigh)))
+                hi_pivots.append((j, highs[j]))
+                hi_pivots = hi_pivots[-6:]
+
+        # sweep: trading through the level yet closing back on the right side
+        still_lo = []
+        for born, level in lo_levels[-6:]:
+            if i <= born:
+                still_lo.append((born, level))
+            elif lows[i] < level and closes[i] > level:
+                last_bull = i
+            elif closes[i] < level - 0.5 * atr[i]:
+                continue  # genuinely broken, not swept — retiring the level
+            else:
+                still_lo.append((born, level))
+        lo_levels = still_lo
+        still_hi = []
+        for born, level in hi_levels[-6:]:
+            if i <= born:
+                still_hi.append((born, level))
+            elif highs[i] > level and closes[i] < level:
+                last_bear = i
+            elif closes[i] > level + 0.5 * atr[i]:
+                continue
+            else:
+                still_hi.append((born, level))
+        hi_levels = still_hi
+
+        if last_bull >= 0:
+            bull_since[i] = i - last_bull
+        if last_bear >= 0:
+            bear_since[i] = i - last_bear
+
+    out["bars_since_bull_sweep"] = bull_since
+    out["bars_since_bear_sweep"] = bear_since
+    return out
+
+
+def vix_fix(df: pd.DataFrame, lookback: int = 22,
+            band: int = 20) -> pd.DataFrame:
+    # computing the williams vix fix and flagging volatility capitulation
+    out = pd.DataFrame(index=df.index)
+    hh_close = df["close"].rolling(lookback, min_periods=lookback).max()
+    wvf = 100 * (hh_close - df["low"]) / hh_close
+    upper = wvf.rolling(band, min_periods=band).mean()         + 2 * wvf.rolling(band, min_periods=band).std()
+    cap = (wvf >= upper).astype(int)
+    out["wvf"] = wvf
+    grp = cap.eq(1).cumsum()
+    since = cap.groupby(grp).cumcount().where(grp > 0)
+    out["bars_since_capitulation"] = since.astype(float)
+    return out
+
+
+def first_pullback(df: pd.DataFrame) -> pd.DataFrame:
+    # flagging the first retrace after a fresh structure break in either side
+    out = pd.DataFrame(index=df.index)
+    ms = market_structure(df)
+    atr = _atr(df)
+    closes = df["close"]
+
+    post_hi = closes.copy()
+    post_lo = closes.copy()
+    brk = ms["bars_since_structure_break"]
+    # tracking the running extreme since the most recent structure break
+    seg = (brk == 0).cumsum()
+    post_hi = df["high"].groupby(seg).cummax()
+    post_lo = df["low"].groupby(seg).cummin()
+
+    dd = (post_hi - closes) / atr
+    du = (closes - post_lo) / atr
+    fresh = brk.between(3, 20)
+    out["first_pullback_long"] = ((ms["structure_trend"] == 1) & fresh
+                                  & dd.between(0.8, 3.0)).astype(int)
+    out["first_pullback_short"] = ((ms["structure_trend"] == -1) & fresh
+                                   & du.between(0.8, 3.0)).astype(int)
+    return out
+
+
+def range_regime(df: pd.DataFrame, lookback: int = 40,
+                 squeeze_hist: int = 120) -> pd.DataFrame:
+    # describing ranging markets and volatility compression before breakouts
+    out = pd.DataFrame(index=df.index)
+    ts = trend_strength(df)
+    ms = market_structure(df)
+
+    hi = df["high"].rolling(lookback, min_periods=10).max()
+    lo = df["low"].rolling(lookback, min_periods=10).min()
+    width = (hi - lo).replace(0, np.nan)
+    out["position_in_range"] = (df["close"] - lo) / width
+    out["ranging"] = ((ts["adx"] < 20)
+                      & (ms["bars_since_structure_break"].isna()
+                         | (ms["bars_since_structure_break"] > 20)))         .astype(int)
+
+    sma20 = df["close"].rolling(20, min_periods=20).mean()
+    std20 = df["close"].rolling(20, min_periods=20).std()
+    bbw = (4 * std20) / sma20
+    pct = bbw.rolling(squeeze_hist, min_periods=40)         .apply(lambda w: (w[-1] >= w).mean() if len(w) else np.nan, raw=True)
+    out["bb_width_pctile"] = pct
+    out["bb_squeeze"] = (pct <= 0.20).astype(int)
+    return out
+
+
+def trend_volume_extras(df: pd.DataFrame) -> pd.DataFrame:
+    # adding the long-term 200 ema regime and a fast/slow volume oscillator
+    out = pd.DataFrame(index=df.index)
+    ema200 = df["close"].ewm(span=200, adjust=False).mean()
+    out["above_ema200"] = (df["close"] > ema200).astype(int)
+    if "volume" in df.columns:
+        v5 = df["volume"].rolling(5, min_periods=5).mean()
+        v20 = df["volume"].rolling(20, min_periods=20).mean()
+        out["volume_osc"] = (v5 - v20) / v20.replace(0, np.nan)
+    else:
+        out["volume_osc"] = np.nan
+    return out
+
+
 def build_structure_features(df: pd.DataFrame) -> pd.DataFrame:
     """Concatenating all structure features on an OHLCV frame indexed by date."""
     parts = [
@@ -317,6 +466,11 @@ def build_structure_features(df: pd.DataFrame) -> pd.DataFrame:
         chandelier_exit(df),
         divergence_features(df),
         volume_profile_features(df),
+        liquidity_sweeps(df),
+        vix_fix(df),
+        first_pullback(df),
+        range_regime(df),
+        trend_volume_extras(df),
     ]
     return pd.concat(parts, axis=1)
 
@@ -360,5 +514,20 @@ def technical_structure_block(df: pd.DataFrame) -> dict:
         "bull_divergence_bars_ago": _num("bars_since_bull_divergence", 0),
         "bear_divergence_bars_ago": _num("bars_since_bear_divergence", 0),
         "close_vs_volume_poc_atr": _num("poc_dist_atr"),
+        "bull_liquidity_sweep_bars_ago": _num("bars_since_bull_sweep", 0),
+        "bear_liquidity_sweep_bars_ago": _num("bars_since_bear_sweep", 0),
+        "volatility_capitulation_bars_ago":
+            _num("bars_since_capitulation", 0),
+        "first_pullback": ("long setup" if last["first_pullback_long"]
+                           else "short setup"
+                           if last["first_pullback_short"] else None),
+        "ranging_market": bool(last["ranging"]),
+        "position_in_range_pct": _num("position_in_range"),
+        "bb_squeeze_active": bool(last["bb_squeeze"]),
+        "above_200ema": bool(last["above_ema200"]),
+        "volume_trend": ("rising" if (last["volume_osc"] or 0) > 0.05
+                         else "falling"
+                         if (last["volume_osc"] or 0) < -0.05 else "flat")
+            if not pd.isna(last["volume_osc"]) else None,
         "chandelier_long_stop": _num("chandelier_long"),
     }
