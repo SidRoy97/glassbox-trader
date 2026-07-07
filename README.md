@@ -327,3 +327,5 @@ are all env-swappable, so provider limit changes are a variable edit, not a code
 **Disclaimer:** educational research output only — nothing here is financial advice. Every
 decision shown was produced by AI models debating public data, gated by hard-coded risk rules,
 executed (if at all) on a simulated account.
+
+© 2026 Siddhartha Roy — source viewable for portfolio purposes; all rights reserved. See LICENSE.
