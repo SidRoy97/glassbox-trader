@@ -94,7 +94,7 @@ def _structure_block(ticker):
         # flattening the multiindex newer yfinance returns for single tickers
         if isinstance(hist.columns, pd.MultiIndex):
             hist.columns = hist.columns.get_level_values(0)
-        df = hist.rename(columns=str.lower)[["open", "high", "low", "close"]]
+        df = hist.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
         return technical_structure_block(df)
     except Exception as e:
         print(f"  [structure] {ticker} block unavailable: {e}")
