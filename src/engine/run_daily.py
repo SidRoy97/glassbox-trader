@@ -348,6 +348,11 @@ def weekly_review():
     elect_champion()
     from engine.retrain_trigger import maybe_trigger_retrain
     maybe_trigger_retrain()
+    try:
+        from engine.evidence_report import evidence_report
+        evidence_report()
+    except Exception as e:
+        print(f"evidence report failed: {e}")
     write_weekly_report()
     if enabled():
         from engine.performance import sync_performance
