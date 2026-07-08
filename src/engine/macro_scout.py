@@ -32,16 +32,32 @@ PROMPT = (
 
 
 def _universe():
-    # finding universe.csv anywhere sensible: repo root, any first-level
-    # subdirectory, the working directory, or STOCK_LENS_BASE
+    # the canonical universe is whatever the screener scanned most
+    # recently — the database needs no file paths; csv is only a fallback
+    try:
+        from engine.memory import get_client
+        rows = get_client().table("screen_results") \
+            .select("ticker") \
+            .order("scanned_at", desc=True).limit(600) \
+            .execute().data or []
+        tickers = {str(r["ticker"]).upper() for r in rows
+                   if r.get("ticker")}
+        if len(tickers) >= 50:
+            return tickers
+    except Exception as e:
+        print(f"  [macro-scout] screen_results unavailable ({e}) — "
+              f"trying universe.csv")
+
     from pathlib import Path
     root = Path(__file__).resolve().parents[2]
     candidates = [root / "universe.csv",
                   *sorted(root.glob("*/universe.csv")),
+                  *sorted(root.glob("*/*/universe.csv")),
                   Path("universe.csv")]
     base = os.environ.get("STOCK_LENS_BASE")
     if base:
-        candidates.append(Path(base) / "universe.csv")
+        candidates += [Path(base) / "universe.csv",
+                       Path(base) / "data" / "universe.csv"]
     for path in candidates:
         try:
             with open(path) as f:
@@ -77,7 +93,7 @@ def macro_pins():
     if universe is None:
         # failing closed: unvalidated pins can waste debate slots on
         # hallucinated or dead tickers, so no universe means no pins
-        print("  [macro-scout] universe.csv not found — refusing to pin")
+        print("  [macro-scout] no universe available — refusing to pin")
         return []
     out = []
     for p in parsed["picks"]:
