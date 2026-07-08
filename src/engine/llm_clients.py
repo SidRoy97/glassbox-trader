@@ -1,6 +1,7 @@
-"""calling the three free-tier llm providers through one uniform interface"""
+"""calling free-tier llm providers through one self-updating interface"""
 
 import os
+import re
 import json
 import requests
 from dotenv import load_dotenv
@@ -10,101 +11,193 @@ load_dotenv()
 MAX_TOKENS = 600
 TIMEOUT = 45
 
-GEMINI_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
-              "{}:generateContent").format(os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"))
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
+# per-provider config: where to chat, where to discover models, small
+# ranked hints (encoding free-tier quota shape and model-family
+# decorrelation that catalogs cannot express), and a last-resort static
+# fallback used only if discovery itself is down
+PROVIDER_CONFIG = {
+    "gemini": {
+        "key_env": "GEMINI_API_KEY", "model_env": "GEMINI_MODEL",
+        "models_url": "https://generativelanguage.googleapis.com/v1beta/models",
+        "hints": ["gemini-2.5-flash", "gemini-2.0-flash"],
+        "fallback": "gemini-2.5-flash",
+    },
+    "groq": {
+        "key_env": "GROQ_API_KEY", "model_env": "GROQ_MODEL",
+        "chat_url": "https://api.groq.com/openai/v1/chat/completions",
+        "models_url": "https://api.groq.com/openai/v1/models",
+        "hints": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+        "fallback": "llama-3.3-70b-versatile",
+    },
+    "mistral": {
+        "key_env": "MISTRAL_API_KEY", "model_env": "MISTRAL_MODEL",
+        "chat_url": "https://api.mistral.ai/v1/chat/completions",
+        "models_url": "https://api.mistral.ai/v1/models",
+        "hints": ["mistral-small-latest", "mistral-medium-latest"],
+        "fallback": "mistral-small-latest",
+    },
+    "cerebras": {
+        "key_env": "CEREBRAS_API_KEY", "model_env": "CEREBRAS_MODEL",
+        "chat_url": "https://api.cerebras.ai/v1/chat/completions",
+        "models_url": "https://api.cerebras.ai/v1/models",
+        "hints": ["zai-glm-4.7", "qwen-3-235b-a22b-instruct-2507",
+                  "qwen-3-32b"],
+        "fallback": "zai-glm-4.7",
+    },
+    "sambanova": {
+        "key_env": "SAMBANOVA_API_KEY", "model_env": "SAMBANOVA_MODEL",
+        "chat_url": "https://api.sambanova.ai/v1/chat/completions",
+        "models_url": "https://api.sambanova.ai/v1/models",
+        "hints": ["DeepSeek-V3.2", "DeepSeek-V3.1"],
+        "fallback": "DeepSeek-V3.2",
+    },
+    "github_models": {
+        "key_env": "GH_MODELS_TOKEN", "model_env": "GH_MODELS_MODEL",
+        "chat_url": "https://models.github.ai/inference/chat/completions",
+        "models_url": "https://models.github.ai/catalog/models",
+        "hints": ["openai/gpt-4.1-mini", "openai/gpt-4o-mini"],
+        "fallback": "openai/gpt-4.1-mini",
+    },
+}
+
+BENCH_PROVIDERS = ["cerebras", "sambanova", "github_models"]
+
+# models that are not general chat judges get filtered before ranking
+_EXCLUDE = ("embed", "whisper", "tts", "audio", "image", "vision", "ocr",
+            "guard", "moderation", "rerank", "code", "coder", "transcrib",
+            "realtime", "live", "safety", "classifier")
+
+
+def _rank_score(model_id):
+    # scoring a model id: newer generation and bigger size rank higher
+    mid = model_id.lower()
+    if any(x in mid for x in _EXCLUDE):
+        return -1.0
+    nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", mid)]
+    generation = max([n for n in nums if n < 10], default=0.0)
+    size = max([n for n in nums if 7 <= n <= 2000], default=0.0)
+    score = generation * 10 + min(size, 500) / 100
+    if "latest" in mid:
+        score += 2
+    if "instruct" in mid or "versatile" in mid or "chat" in mid:
+        score += 1
+    if "distill" in mid or "mini" in mid or "nano" in mid or "lite" in mid:
+        score -= 1
+    if "preview" in mid or "exp" in mid:
+        score -= 2
+    return score
+
+
+def _catalog_ids(provider):
+    # asking the provider which model ids this key can actually use
+    cfg = PROVIDER_CONFIG[provider]
+    key = os.environ.get(cfg["key_env"])
+    if provider == "gemini":
+        r = requests.get(f"{cfg['models_url']}?key={key}", timeout=20)
+        if r.status_code >= 400:
+            raise RuntimeError(f"{r.status_code}: {r.text[:120]}")
+        out = []
+        for m in r.json().get("models", []):
+            if "generateContent" in (m.get("supportedGenerationMethods")
+                                     or []):
+                out.append(m.get("name", "").removeprefix("models/"))
+        return out
+    r = requests.get(cfg["models_url"],
+                     headers={"Authorization": f"Bearer {key}"}, timeout=20)
+    if r.status_code >= 400:
+        raise RuntimeError(f"{r.status_code}: {r.text[:120]}")
+    body = r.json()
+    items = body.get("data", body) if isinstance(body, dict) else body
+    return [m.get("id") for m in items if isinstance(m, dict) and m.get("id")]
+
+
+_resolved_models = {}
+
+
+def resolve_model(provider):
+    # choosing a model once per run: a catalog-confirmed env pin, then the
+    # first hint the live catalog offers, then the best-ranked catalog
+    # entry, then the static fallback — a stale pin degrades, never kills
+    if provider in _resolved_models:
+        return _resolved_models[provider]
+    cfg = PROVIDER_CONFIG[provider]
+    available = None
+    try:
+        available = _catalog_ids(provider)
+    except Exception as e:
+        print(f"  [llm] {provider} model discovery failed ({e})")
+
+    pick = None
+    pinned = os.environ.get(cfg["model_env"])
+    if pinned:
+        confirmed = available is None or pinned in available or any(
+            pinned in a or a in pinned for a in available)
+        if confirmed:
+            pick = pinned
+        else:
+            print(f"  [llm] {provider}: pinned model '{pinned}' not in "
+                  f"live catalog — ignoring the pin")
+    if not pick and available:
+        pick = next((h for h in cfg["hints"] if h in available), None)
+        if not pick:
+            ranked = sorted(available, key=_rank_score, reverse=True)
+            if ranked and _rank_score(ranked[0]) > 0:
+                pick = ranked[0]
+                print(f"  [llm] {provider}: no hint available — "
+                      f"auto-ranked {pick} from {len(available)} models")
+    if not pick:
+        pick = cfg["fallback"]
+        print(f"  [llm] {provider}: using static fallback {pick}")
+    _resolved_models[provider] = pick
+    return pick
+
+
+def _openai_style(provider, prompt):
+    # calling any openai-compatible endpoint with shared plumbing
+    cfg = PROVIDER_CONFIG[provider]
+    r = requests.post(cfg["chat_url"],
+                      headers={"Authorization":
+                               f"Bearer {os.environ.get(cfg['key_env'])}"},
+                      json={"model": resolve_model(provider),
+                            "messages": [{"role": "user", "content": prompt}],
+                            "max_tokens": MAX_TOKENS, "temperature": 0.4},
+                      timeout=TIMEOUT)
+    if r.status_code >= 400:
+        # surfacing the body so a 4xx explains itself in the log
+        raise RuntimeError(f"{r.status_code}: {r.text[:200]}")
+    return r.json()["choices"][0]["message"]["content"]
 
 
 def ask_gemini(prompt):
-    # requesting one completion from the gemini free tier
+    # requesting one completion from gemini on its resolved model
     key = os.environ.get("GEMINI_API_KEY")
-    r = requests.post(f"{GEMINI_URL}?key={key}",
+    model = resolve_model("gemini")
+    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+           f"{model}:generateContent?key={key}")
+    r = requests.post(url,
                       json={"contents": [{"parts": [{"text": prompt}]}],
                             "generationConfig": {
                                 "maxOutputTokens": MAX_TOKENS,
                                 "temperature": 0.4,
                                 "thinkingConfig": {"thinkingBudget": 0}}},
                       timeout=TIMEOUT)
-    r.raise_for_status()
+    if r.status_code >= 400:
+        raise RuntimeError(f"{r.status_code}: {r.text[:200]}")
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def ask_groq(prompt):
-    # requesting one completion from the groq free tier
-    key = os.environ.get("GROQ_API_KEY")
-    r = requests.post(GROQ_URL,
-                      headers={"Authorization": f"Bearer {key}"},
-                      json={"model": os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
-                            "messages": [{"role": "user", "content": prompt}],
-                            "max_tokens": MAX_TOKENS, "temperature": 0.4},
-                      timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
-
-
-def ask_mistral(prompt):
-    # requesting one completion from the mistral free tier
-    key = os.environ.get("MISTRAL_API_KEY")
-    r = requests.post(MISTRAL_URL,
-                      headers={"Authorization": f"Bearer {key}"},
-                      json={"model": os.environ.get("MISTRAL_MODEL", "mistral-small-latest"),
-                            "messages": [{"role": "user", "content": prompt}],
-                            "max_tokens": MAX_TOKENS, "temperature": 0.4},
-                      timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
-
-
-CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
-SAMBANOVA_URL = "https://api.sambanova.ai/v1/chat/completions"
-GH_MODELS_URL = "https://models.github.ai/inference/chat/completions"
-
-
-def _openai_style(url, key, model, prompt):
-    # calling any openai-compatible endpoint with shared plumbing
-    r = requests.post(url,
-                      headers={"Authorization": f"Bearer {key}"},
-                      json={"model": model,
-                            "messages": [{"role": "user", "content": prompt}],
-                            "max_tokens": MAX_TOKENS, "temperature": 0.4},
-                      timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
-
-
-def ask_cerebras(prompt):
-    # requesting one completion from the cerebras free tier (qwen family)
-    return _openai_style(CEREBRAS_URL, os.environ.get("CEREBRAS_API_KEY"),
-                         os.environ.get("CEREBRAS_MODEL", "qwen-3-32b"),
-                         prompt)
-
-
-def ask_sambanova(prompt):
-    # requesting one completion from sambanova (deepseek family)
-    return _openai_style(SAMBANOVA_URL, os.environ.get("SAMBANOVA_API_KEY"),
-                         os.environ.get("SAMBANOVA_MODEL",
-                                        "DeepSeek-V3-0324"),
-                         prompt)
-
-
-def ask_github_models(prompt):
-    # requesting one completion from github models (openai family)
-    return _openai_style(GH_MODELS_URL, os.environ.get("GH_MODELS_TOKEN"),
-                         os.environ.get("GH_MODELS_MODEL",
-                                        "openai/gpt-4.1-mini"),
-                         prompt)
-
-
-PROVIDERS = {"gemini": ask_gemini, "groq": ask_groq,
-             "mistral": ask_mistral, "cerebras": ask_cerebras,
-             "sambanova": ask_sambanova, "github_models": ask_github_models}
+PROVIDERS = {
+    "gemini": ask_gemini,
+    "groq": lambda p: _openai_style("groq", p),
+    "mistral": lambda p: _openai_style("mistral", p),
+    "cerebras": lambda p: _openai_style("cerebras", p),
+    "sambanova": lambda p: _openai_style("sambanova", p),
+    "github_models": lambda p: _openai_style("github_models", p),
+}
 
 # bench providers only join rotation when their key is present
-BENCH = [p for p, env in [("cerebras", "CEREBRAS_API_KEY"),
-                          ("sambanova", "SAMBANOVA_API_KEY"),
-                          ("github_models", "GH_MODELS_TOKEN")]
-         if os.environ.get(env)]
+BENCH = [p for p in BENCH_PROVIDERS
+         if os.environ.get(PROVIDER_CONFIG[p]["key_env"])]
 
 
 _consecutive_failures = {}
@@ -136,6 +229,8 @@ def ask(provider, prompt):
         except Exception as e:
             status = getattr(getattr(e, "response", None),
                              "status_code", None)
+            if status is None and str(e)[:3] == "429":
+                status = 429
             print(f"  [llm] {provider} attempt {attempt} failed: {e}")
             if attempt < attempts[-1]:
                 # waiting out a rate-limit window instead of burning strikes
