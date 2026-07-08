@@ -56,11 +56,13 @@ PROVIDER_CONFIG = {
         "chat_url": "https://openrouter.ai/api/v1/chat/completions",
         "models_url": "https://openrouter.ai/api/v1/models",
         "require": ":free",
-        "hints": ["meta-llama/llama-4-maverick:free",
-                  "qwen/qwen3-235b-a22b:free",
-                  "meta-llama/llama-4-scout:free",
-                  "meta-llama/llama-3.3-70b-instruct:free"],
-        "fallback": "meta-llama/llama-4-maverick:free",
+        # openrouter's own free-pool router load-balances across whatever
+        # free capacity is live, dodging single-model upstream congestion
+        "hints": ["qwen/qwen3-235b-a22b:free",
+                  "meta-llama/llama-4-maverick:free",
+                  "meta-llama/llama-4-scout:free"],
+        "fallback": "openrouter/auto",
+        "prefer_router": "openrouter/auto",
         "min_size": 30,
     },
     "nvidia": {
@@ -164,6 +166,12 @@ def resolve_model(provider):
         print(f"  [llm] {provider} model discovery failed ({e})")
 
     pick = None
+    router = cfg.get("prefer_router")
+    if router and not os.environ.get(cfg["model_env"]):
+        # trying the provider's own load-balancing router first
+        pick_router = router
+    else:
+        pick_router = None
     pinned = os.environ.get(cfg["model_env"])
     if pinned:
         confirmed = available is None or pinned in available or any(
@@ -186,6 +194,9 @@ def resolve_model(provider):
                 pick = ranked[0]
                 print(f"  [llm] {provider}: no hint available — "
                       f"auto-ranked {pick} from {len(available)} models")
+    if not pick and pick_router:
+        pick = pick_router
+        print(f"  [llm] {provider}: using load-balancing router {pick}")
     if not pick:
         pick = cfg["fallback"]
         print(f"  [llm] {provider}: using static fallback {pick}")
