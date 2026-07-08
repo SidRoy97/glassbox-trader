@@ -105,6 +105,19 @@ def pick_watchlist(recently_debated, limit):
             picks.append(t)
     picks = picks[:DEBATE_BUDGET]
 
+    # letting the macro scout nominate headline-driven names after user
+    # pins — automated pins respect the cooldown, user pins never do
+    if fill != "empty":
+        try:
+            from engine.macro_scout import macro_pins
+            for t, why in macro_pins():
+                if t not in picks and t not in recently_debated \
+                        and len(picks) < DEBATE_BUDGET:
+                    picks.append(t)
+                    print(f"[picks] macro scout pinned {t}: {why}")
+        except Exception as e:
+            print(f"[picks] macro scout unavailable: {e}")
+
     # always scanning so screen_results and the site's scan page stay fresh
     need = DEBATE_BUDGET - len(picks)
     k = DEBATE_BUDGET if (fill == "empty" or need <= 0) else need
