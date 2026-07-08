@@ -21,6 +21,23 @@ jobs:
           python-version: "3.12"
       - name: deps
         run: pip install requests python-dotenv transformers torch --index-url https://pypi.org/simple --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: list available models
+        run: |
+          python - <<'EOF'
+          import os, requests
+          for name, url, key in [
+              ("cerebras", "https://api.cerebras.ai/v1/models",
+               os.environ.get("CEREBRAS_API_KEY")),
+              ("sambanova", "https://api.sambanova.ai/v1/models",
+               os.environ.get("SAMBANOVA_API_KEY"))]:
+              r = requests.get(url, headers={"Authorization": f"Bearer {key}"},
+                               timeout=20)
+              print(f"=== {name} ({r.status_code}) ===")
+              print(r.text[:1200])
+          EOF
+        env:
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          SAMBANOVA_API_KEY: ${{ secrets.SAMBANOVA_API_KEY }}
       - name: bench smoke test
         env:
           PYTHONPATH: ${{ github.workspace }}/src
