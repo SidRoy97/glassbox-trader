@@ -56,10 +56,12 @@ PROVIDER_CONFIG = {
         "chat_url": "https://openrouter.ai/api/v1/chat/completions",
         "models_url": "https://openrouter.ai/api/v1/models",
         "require": ":free",
-        "hints": ["moonshotai/kimi-k2:free",
-                  "deepseek/deepseek-chat-v3.1:free",
-                  "qwen/qwen3-235b-a22b:free"],
-        "fallback": "moonshotai/kimi-k2:free",
+        "hints": ["meta-llama/llama-4-maverick:free",
+                  "qwen/qwen3-235b-a22b:free",
+                  "meta-llama/llama-4-scout:free",
+                  "meta-llama/llama-3.3-70b-instruct:free"],
+        "fallback": "meta-llama/llama-4-maverick:free",
+        "min_size": 30,
     },
     "nvidia": {
         "key_env": "NVIDIA_API_KEY", "model_env": "NVIDIA_MODEL",
@@ -89,6 +91,17 @@ BENCH_PROVIDERS = ["cerebras", "sambanova", "github_models",
 _EXCLUDE = ("embed", "whisper", "tts", "audio", "image", "vision", "ocr",
             "guard", "moderation", "rerank", "code", "coder", "transcrib",
             "realtime", "live", "safety", "classifier")
+
+
+def _model_size(model_id):
+    # reading the parameter count in billions from a model id, if present
+    import re
+    mid = model_id.lower()
+    best = 0.0
+    for num, unit in re.findall(r"(\d+(?:\.\d+)?)\s*([bm])", mid):
+        v = float(num) * (0.001 if unit == "m" else 1)
+        best = max(best, v)
+    return best
 
 
 def _rank_score(model_id):
@@ -165,8 +178,11 @@ def resolve_model(provider):
     if not pick and available:
         pick = next((h for h in cfg["hints"] if h in available), None)
         if not pick:
-            ranked = sorted(available, key=_rank_score, reverse=True)
-            if ranked and _rank_score(ranked[0]) > 0:
+            floor = cfg.get("min_size", 0)
+            ranked = [m for m in sorted(available, key=_rank_score,
+                                        reverse=True)
+                      if _rank_score(m) > 0 and _model_size(m) >= floor]
+            if ranked:
                 pick = ranked[0]
                 print(f"  [llm] {provider}: no hint available — "
                       f"auto-ranked {pick} from {len(available)} models")
@@ -230,8 +246,9 @@ BENCH = [p for p in BENCH_PROVIDERS
 
 # explicit substitution priority: deepest free quotas first, gemini last;
 # override with a FALLBACK_ORDER repo variable (comma-separated)
-DEFAULT_FALLBACK_ORDER = ["cerebras", "groq", "mistral", "sambanova",
-                          "github_models", "openrouter", "nvidia", "gemini"]
+DEFAULT_FALLBACK_ORDER = ["cerebras", "groq", "mistral", "nvidia",
+                          "github_models", "openrouter", "sambanova",
+                          "gemini"]
 
 
 def _fallback_order():
