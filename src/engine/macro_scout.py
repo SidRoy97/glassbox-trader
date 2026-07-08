@@ -12,23 +12,34 @@ MAX_MACRO_PINS = 2
 _SCOUT_PROVIDERS = ["gemini", "mistral", "groq"]
 
 PROMPT = (
-    "You screen macro and geopolitical headlines for single-stock impact.\n"
+    "You screen macro, geopolitical, policy, and industry headlines for "
+    "stock-level impact, including TRANSITIVE and CROSS-DOMAIN chains.\n"
     "Today's market-wide headlines (with sentiment):\n{headlines}\n\n"
-    "Name at most {k} S&P 500 tickers whose business is DIRECTLY and "
-    "MATERIALLY affected by these specific headlines today — supply, "
-    "demand, costs, sanctions, regulation. Do not name broad-market "
-    "proxies, do not stretch: if no single stock is clearly and "
-    "materially affected, return an empty list.\n"
+    "Reason through impact chains of any depth — for example: conflict -> "
+    "commodity supply -> producers or their input-cost victims; policy or "
+    "rates -> financing costs -> rate-sensitive sectors; a disaster or "
+    "strike -> logistics -> retailers' inventory; regulation -> compliance "
+    "costs -> incumbents vs disruptors; a technology shift -> suppliers "
+    "several links up the chain.\n"
+    "Name at most {k} S&P 500 tickers where such a chain makes a MATERIAL "
+    "difference to the business within days-to-weeks. The chain may be "
+    "indirect but every link must be stated and plausible — no "
+    "broad-market proxies, no vague sector vibes. If nothing clears the "
+    "materiality bar, return an empty list; that is a good answer.\n"
     'Respond with ONLY this JSON: {{"picks": [{{"ticker": "XOM", '
-    '"why": "one short sentence tying it to a headline"}}]}}'
+    '"why": "the causal chain in one compact sentence"}}]}}'
 )
 
 
 def _universe():
-    # loading the current constituent list for validation
-    for path in ("universe.csv",
-                 os.path.join(os.environ.get("STOCK_LENS_BASE", ""),
-                              "universe.csv")):
+    # loading the current constituent list from wherever we are running
+    candidates = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                     "..", "..", "universe.csv"),   # repo root from src/engine
+        "universe.csv",
+        os.path.join(os.environ.get("STOCK_LENS_BASE", ""), "universe.csv"),
+    ]
+    for path in candidates:
         try:
             with open(path) as f:
                 return {line.strip().split(",")[0].upper()
@@ -60,6 +71,11 @@ def macro_pins():
         return []
 
     universe = _universe()
+    if universe is None:
+        # failing closed: unvalidated pins can waste debate slots on
+        # hallucinated or dead tickers, so no universe means no pins
+        print("  [macro-scout] universe.csv not found — refusing to pin")
+        return []
     out = []
     for p in parsed["picks"]:
         if len(out) >= MAX_MACRO_PINS:
@@ -69,7 +85,7 @@ def macro_pins():
         if not ticker.replace(".", "").replace("-", "").isalpha() \
                 or len(ticker) > 6:
             continue
-        if universe is not None and ticker not in universe:
+        if ticker not in universe:
             print(f"  [macro-scout] {ticker} not in universe — dropped")
             continue
         out.append((ticker, why))
