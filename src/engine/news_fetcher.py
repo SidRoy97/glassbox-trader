@@ -93,10 +93,37 @@ def dedupe(items):
 
 
 _analyzer = None
+_finbert = None
+_finbert_dead = False
+
+
+def _finbert_score(text):
+    # scoring with the finance-tuned finbert model when available
+    global _finbert, _finbert_dead
+    if _finbert_dead:
+        return None
+    try:
+        if _finbert is None:
+            from transformers import pipeline
+            _finbert = pipeline("text-classification",
+                                model="ProsusAI/finbert", top_k=None)
+            print("  [news] finbert loaded for sentiment")
+        scores = {d["label"]: d["score"]
+                  for d in _finbert(str(text)[:400])[0]}
+        return round(scores.get("positive", 0.0)
+                     - scores.get("negative", 0.0), 3)
+    except Exception as e:
+        # falling back to vader for this run rather than failing news
+        print(f"  [news] finbert unavailable ({e}) — using vader")
+        _finbert_dead = True
+        return None
 
 
 def score_sentiment(text):
     # scoring headline sentiment between -1 and 1 with a finance-aware lexicon
+    fb = _finbert_score(text)
+    if fb is not None:
+        return fb
     global _analyzer
     try:
         if _analyzer is None:

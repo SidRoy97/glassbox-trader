@@ -56,7 +56,55 @@ def ask_mistral(prompt):
     return r.json()["choices"][0]["message"]["content"]
 
 
-PROVIDERS = {"gemini": ask_gemini, "groq": ask_groq, "mistral": ask_mistral}
+CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
+SAMBANOVA_URL = "https://api.sambanova.ai/v1/chat/completions"
+GH_MODELS_URL = "https://models.github.ai/inference/chat/completions"
+
+
+def _openai_style(url, key, model, prompt):
+    # calling any openai-compatible endpoint with shared plumbing
+    r = requests.post(url,
+                      headers={"Authorization": f"Bearer {key}"},
+                      json={"model": model,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "max_tokens": MAX_TOKENS, "temperature": 0.4},
+                      timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def ask_cerebras(prompt):
+    # requesting one completion from the cerebras free tier (qwen family)
+    return _openai_style(CEREBRAS_URL, os.environ.get("CEREBRAS_API_KEY"),
+                         os.environ.get("CEREBRAS_MODEL", "qwen-3-32b"),
+                         prompt)
+
+
+def ask_sambanova(prompt):
+    # requesting one completion from sambanova (deepseek family)
+    return _openai_style(SAMBANOVA_URL, os.environ.get("SAMBANOVA_API_KEY"),
+                         os.environ.get("SAMBANOVA_MODEL",
+                                        "DeepSeek-V3-0324"),
+                         prompt)
+
+
+def ask_github_models(prompt):
+    # requesting one completion from github models (openai family)
+    return _openai_style(GH_MODELS_URL, os.environ.get("GH_MODELS_TOKEN"),
+                         os.environ.get("GH_MODELS_MODEL",
+                                        "openai/gpt-4.1-mini"),
+                         prompt)
+
+
+PROVIDERS = {"gemini": ask_gemini, "groq": ask_groq,
+             "mistral": ask_mistral, "cerebras": ask_cerebras,
+             "sambanova": ask_sambanova, "github_models": ask_github_models}
+
+# bench providers only join rotation when their key is present
+BENCH = [p for p, env in [("cerebras", "CEREBRAS_API_KEY"),
+                          ("sambanova", "SAMBANOVA_API_KEY"),
+                          ("github_models", "GH_MODELS_TOKEN")]
+         if os.environ.get(env)]
 
 
 _consecutive_failures = {}
