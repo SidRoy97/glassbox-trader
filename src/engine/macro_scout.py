@@ -36,10 +36,12 @@ def _universe():
     # recently — the database needs no file paths; csv is only a fallback
     try:
         from engine.memory import get_client
-        rows = get_client().table("screen_results") \
-            .select("ticker") \
-            .order("scanned_at", desc=True).limit(600) \
-            .execute().data or []
+        q = get_client().table("screen_results").select("ticker")
+        try:
+            rows = q.order("id", desc=True).limit(600).execute().data or []
+        except Exception:
+            rows = get_client().table("screen_results").select("ticker") \
+                .limit(600).execute().data or []
         tickers = {str(r["ticker"]).upper() for r in rows
                    if r.get("ticker")}
         if len(tickers) >= 50:

@@ -204,6 +204,17 @@ _consecutive_failures = {}
 _circuit_opened_at = {}
 CIRCUIT_THRESHOLD = 3        # opening the circuit after this many strikeouts
 CIRCUIT_COOLDOWN = 120       # allowing a single probe call after this long
+QUOTA_COOLDOWN = 3600        # probing only hourly once a daily quota is dead
+_quota_exhausted = {}
+
+
+def _quota_dead(status, message):
+    # recognising a spent daily quota, which no backoff can fix
+    if status != 429:
+        return False
+    m = message.lower()
+    return ("current quota" in m or "plan and billing" in m
+            or "perday" in m or "daily" in m)
 
 
 def ask(provider, prompt):
@@ -212,7 +223,9 @@ def ask(provider, prompt):
     import time
     probing = False
     if _consecutive_failures.get(provider, 0) >= CIRCUIT_THRESHOLD:
-        if time.time() - _circuit_opened_at.get(provider, 0) < CIRCUIT_COOLDOWN:
+        cooldown = (QUOTA_COOLDOWN if _quota_exhausted.get(provider)
+                    else CIRCUIT_COOLDOWN)
+        if time.time() - _circuit_opened_at.get(provider, 0) < cooldown:
             print(f"  [llm] {provider} circuit open — skipping")
             return None
         probing = True
@@ -225,6 +238,7 @@ def ask(provider, prompt):
             if _consecutive_failures.get(provider, 0) >= CIRCUIT_THRESHOLD:
                 print(f"  [llm] {provider} recovered — circuit closed")
             _consecutive_failures[provider] = 0
+            _quota_exhausted.pop(provider, None)
             return reply
         except Exception as e:
             status = getattr(getattr(e, "response", None),
@@ -232,6 +246,14 @@ def ask(provider, prompt):
             if status is None and str(e)[:3] == "429":
                 status = 429
             print(f"  [llm] {provider} attempt {attempt} failed: {e}")
+            if _quota_dead(status, str(e)):
+                # a spent daily quota cannot be waited out — benching now
+                print(f"  [llm] {provider} daily quota exhausted — "
+                      f"benching for this run")
+                _quota_exhausted[provider] = True
+                _consecutive_failures[provider] = CIRCUIT_THRESHOLD
+                _circuit_opened_at[provider] = time.time()
+                return None
             if attempt < attempts[-1]:
                 # waiting out a rate-limit window instead of burning strikes
                 time.sleep(20 if status == 429 else 4)
