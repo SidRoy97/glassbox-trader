@@ -96,25 +96,43 @@ _analyzer = None
 _finbert = None
 _finbert_dead = False
 
+# finance sentiment ladder: env override first, then candidates in order
+# — first one that loads wins, and every run on ci pulls its latest head
+FINBERT_CANDIDATES = [m for m in [
+    os.environ.get("FINBERT_MODEL"),
+    "ProsusAI/finbert",
+    "yiyanghkust/finbert-tone",
+] if m]
+
 
 def _finbert_score(text):
-    # scoring with the finance-tuned finbert model when available
+    # scoring with the best available finance-tuned model
     global _finbert, _finbert_dead
     if _finbert_dead:
         return None
     try:
         if _finbert is None:
             from transformers import pipeline
-            _finbert = pipeline("text-classification",
-                                model="ProsusAI/finbert", top_k=None)
-            print("  [news] finbert loaded for sentiment")
-        scores = {d["label"]: d["score"]
+            last_err = None
+            for name in FINBERT_CANDIDATES:
+                try:
+                    _finbert = pipeline("text-classification",
+                                        model=name, top_k=None)
+                    print(f"  [news] sentiment model loaded: {name}")
+                    break
+                except Exception as e:
+                    last_err = e
+                    print(f"  [news] {name} failed to load — trying next")
+            if _finbert is None:
+                raise RuntimeError(last_err)
+        scores = {d["label"].lower(): d["score"]
                   for d in _finbert(str(text)[:400])[0]}
-        return round(scores.get("positive", 0.0)
-                     - scores.get("negative", 0.0), 3)
+        pos = next((v for k, v in scores.items() if k.startswith("pos")), 0.0)
+        neg = next((v for k, v in scores.items() if k.startswith("neg")), 0.0)
+        return round(pos - neg, 3)
     except Exception as e:
         # falling back to vader for this run rather than failing news
-        print(f"  [news] finbert unavailable ({e}) — using vader")
+        print(f"  [news] finance models unavailable ({e}) — using vader")
         _finbert_dead = True
         return None
 
