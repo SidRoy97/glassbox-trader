@@ -152,10 +152,21 @@ def _macro_block():
     # attaching market-wide headlines, tolerating any failure
     try:
         from engine.news_fetcher import fetch_macro_news
+        from datetime import datetime, timezone
         items = fetch_macro_news()
-        return [{"headline": i["headline"], "sentiment": i["sentiment"],
-                 "published_at": i["published_at"]}
-                for i in items] or None
+        out = []
+        for i in items:
+            age = None
+            try:
+                ts = datetime.fromisoformat(i["published_at"])
+                age = round((datetime.now(timezone.utc) - ts)
+                            .total_seconds() / 3600, 1)
+            except Exception:
+                pass
+            out.append({"headline": i["headline"],
+                        "sentiment": i["sentiment"],
+                        "age_hours": age})
+        return out or None
     except Exception as e:
         print(f"  [packet] macro block failed: {e}")
         return None

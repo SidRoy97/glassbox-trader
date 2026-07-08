@@ -32,13 +32,16 @@ PROMPT = (
 
 
 def _universe():
-    # loading the current constituent list from wherever we are running
-    candidates = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                     "..", "..", "universe.csv"),   # repo root from src/engine
-        "universe.csv",
-        os.path.join(os.environ.get("STOCK_LENS_BASE", ""), "universe.csv"),
-    ]
+    # finding universe.csv anywhere sensible: repo root, any first-level
+    # subdirectory, the working directory, or STOCK_LENS_BASE
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    candidates = [root / "universe.csv",
+                  *sorted(root.glob("*/universe.csv")),
+                  Path("universe.csv")]
+    base = os.environ.get("STOCK_LENS_BASE")
+    if base:
+        candidates.append(Path(base) / "universe.csv")
     for path in candidates:
         try:
             with open(path) as f:
