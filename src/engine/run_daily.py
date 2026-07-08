@@ -137,6 +137,8 @@ def run_daily():
         from engine.execution import trading_mode, base_url
         print(f"[exec] mode={trading_mode().upper()} endpoint={base_url()}")
     upsert_market_context(market_summary())
+    from engine.news_fetcher import archive_macro_news
+    archive_macro_news()
 
     limit = int(SCAN_LIMIT) if SCAN_LIMIT and str(SCAN_LIMIT).strip() else None
     recently_debated = set(get_recent_tickers(days=DEBATE_COOLDOWN_DAYS))

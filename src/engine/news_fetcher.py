@@ -10,6 +10,7 @@ load_dotenv()
 
 YAHOO_RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}"
 FINNHUB_NEWS = "https://finnhub.io/api/v1/company-news"
+FINNHUB_MACRO = "https://finnhub.io/api/v1/news"
 
 
 def fetch_yahoo_rss(ticker):
@@ -26,6 +27,61 @@ def fetch_yahoo_rss(ticker):
                       "summary": getattr(e, "summary", "")[:2000],
                       "url": getattr(e, "link", None)})
     return items
+
+
+_macro_cache = None
+
+
+def fetch_macro_news(limit=5):
+    # pulling market-wide headlines once per run: geopolitics, fed, macro
+    global _macro_cache
+    if _macro_cache is not None:
+        return _macro_cache
+    key = os.environ.get("FINNHUB_API_KEY")
+    if not key:
+        _macro_cache = []
+        return _macro_cache
+    try:
+        r = requests.get(FINNHUB_MACRO,
+                         params={"category": "general", "token": key},
+                         timeout=15)
+        r.raise_for_status()
+        items = []
+        for a in (r.json() or [])[:limit * 3]:
+            headline = (a.get("headline") or "").strip()
+            if not headline:
+                continue
+            items.append({
+                "headline": headline,
+                "source": a.get("source") or "finnhub",
+                "published_at": datetime.fromtimestamp(
+                    a.get("datetime", 0),
+                    tz=timezone.utc).isoformat(),
+                "sentiment": score_sentiment(headline),
+                "url": a.get("url") or "",
+            })
+            if len(items) >= limit:
+                break
+        _macro_cache = items
+        print(f"  [news] {len(items)} macro headlines fetched")
+    except Exception as e:
+        print(f"  [news] macro fetch failed: {e}")
+        _macro_cache = []
+    return _macro_cache
+
+
+def archive_macro_news():
+    # storing macro headlines under the MARKET pseudo-ticker for the site
+    try:
+        from engine.memory import insert_news
+        for it in fetch_macro_news():
+            insert_news(ticker="MARKET",
+                        published_at=it["published_at"],
+                        source=it["source"], headline=it["headline"],
+                        summary="", url=it["url"],
+                        sentiment=it["sentiment"])
+    except Exception as e:
+        print(f"  [news] macro archive failed: {e}")
 
 
 def fetch_finnhub(ticker, days_back=3):

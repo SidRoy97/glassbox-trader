@@ -3,7 +3,8 @@
 from engine.llm_clients import ask, parse_json_reply
 from engine.data_packet import packet_to_text
 
-GROUNDING = ("RULES: every claim must cite a field from the data packet by "
+GROUNDING = ("RULES: the packet's evidence_reliability table grades each evidence category A (strongest) to D (weakest) — prefer higher-grade evidence when claims conflict; measured grades come from real scored outcomes and outrank priors. "
+             "Every claim must cite a field from the data packet by "
              "name (e.g. cnn_signal.rsi, technical_structure.adx, "
              "news[2].headline). claims citing facts not in the packet will "
              "be struck. respond with ONLY the json object, no prose before "

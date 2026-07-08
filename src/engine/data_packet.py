@@ -132,6 +132,35 @@ def _overnight_gap(ticker):
         return None
 
 
+_reliability_cache = None
+
+
+def _reliability_block():
+    # attaching evidence grades once per run, tolerating any failure
+    global _reliability_cache
+    if _reliability_cache is None:
+        try:
+            from engine.evidence_weights import evidence_reliability_block
+            _reliability_cache = evidence_reliability_block()
+        except Exception as e:
+            print(f"  [packet] reliability block failed: {e}")
+            _reliability_cache = {}
+    return _reliability_cache or None
+
+
+def _macro_block():
+    # attaching market-wide headlines, tolerating any failure
+    try:
+        from engine.news_fetcher import fetch_macro_news
+        items = fetch_macro_news()
+        return [{"headline": i["headline"], "sentiment": i["sentiment"],
+                 "published_at": i["published_at"]}
+                for i in items] or None
+    except Exception as e:
+        print(f"  [packet] macro block failed: {e}")
+        return None
+
+
 def _insider_block(ticker):
     # attaching recent insider filing evidence, tolerating any failure
     try:
@@ -154,6 +183,8 @@ def build_packet(ticker, news_items):
         "technical_structure": _structure_block(ticker),
         "overnight_gap_pct": _overnight_gap(ticker),
         "insider_activity": _insider_block(ticker),
+        "evidence_reliability": _reliability_block(),
+        "macro_news": _macro_block(),
         "days_to_earnings": fetch_next_earnings(ticker),
         "news": [{"headline": n["headline"][:200],
                   "summary": (n.get("summary") or "")[:300],
