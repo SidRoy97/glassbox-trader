@@ -65,9 +65,13 @@ PROVIDER_CONFIG = {
         "key_env": "NVIDIA_API_KEY", "model_env": "NVIDIA_MODEL",
         "chat_url": "https://integrate.api.nvidia.com/v1/chat/completions",
         "models_url": "https://integrate.api.nvidia.com/v1/models",
-        "hints": ["nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "hints": ["nvidia/nemotron-3-ultra-550b-a55b",
+                  "nvidia/llama-3.3-nemotron-super-49b-v1.5",
                   "nvidia/llama-3.1-nemotron-70b-instruct"],
-        "fallback": "nvidia/llama-3.1-nemotron-70b-instruct",
+        "fallback": "nvidia/nemotron-3-ultra-550b-a55b",
+        # nemotron is a reasoning model: thinking must stay off for judge
+        # seats or the json lands in the reasoning channel past our budget
+        "extra_json": {"chat_template_kwargs": {"enable_thinking": False}},
     },
     "github_models": {
         "key_env": "GH_MODELS_TOKEN", "model_env": "GH_MODELS_MODEL",
@@ -176,12 +180,14 @@ def resolve_model(provider):
 def _openai_style(provider, prompt):
     # calling any openai-compatible endpoint with shared plumbing
     cfg = PROVIDER_CONFIG[provider]
+    payload = {"model": resolve_model(provider),
+               "messages": [{"role": "user", "content": prompt}],
+               "max_tokens": MAX_TOKENS, "temperature": 0.4}
+    payload.update(cfg.get("extra_json", {}))
     r = requests.post(cfg["chat_url"],
                       headers={"Authorization":
                                f"Bearer {os.environ.get(cfg['key_env'])}"},
-                      json={"model": resolve_model(provider),
-                            "messages": [{"role": "user", "content": prompt}],
-                            "max_tokens": MAX_TOKENS, "temperature": 0.4},
+                      json=payload,
                       timeout=TIMEOUT)
     if r.status_code >= 400:
         # surfacing the body so a 4xx explains itself in the log
