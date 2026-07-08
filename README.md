@@ -4,8 +4,6 @@
 The system grades itself nightly, elects its own brain weekly, and retrains
 itself when its own scorecard demands it.**
 
-Live site: **https://glassbox-trader.vercel.app** · Mode: **PAPER** (simulated money)
-
 glassbox-trader is a fully autonomous trading research system. Every weekday morning it scans the
 **current** S&P 500 (self-refreshed monthly), picks the most interesting names, makes three AI
 model families argue about each one over sealed evidence, lets a hard-coded risk gate have the
