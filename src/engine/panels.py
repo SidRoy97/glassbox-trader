@@ -24,10 +24,9 @@ def _panel(env, default):
 BUY_PANEL = _panel("BULL_PANEL", "gemini,groq")
 SELL_PANEL = _panel("BEAR_PANEL", "mistral,groq")
 JUDGE_PANEL = _panel("JUDGE_PANEL", "gemini,groq,mistral")
-from engine.llm_clients import BENCH
-# primaries first, then the bench trio (qwen, deepseek, gpt families)
-# which only ever fill seats when a primary's circuit is dark
-ALL_PROVIDERS = ["gemini", "groq", "mistral"] + BENCH
+# substitution follows the explicit priority order: deepest free
+# quotas first, quota-poor providers last
+from engine.llm_clients import FALLBACK_ORDER as ALL_PROVIDERS
 
 
 def _seat_reply(prompt, preferred, used, schema):

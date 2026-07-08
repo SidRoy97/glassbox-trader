@@ -51,6 +51,24 @@ PROVIDER_CONFIG = {
         "hints": ["DeepSeek-V3.2", "DeepSeek-V3.1"],
         "fallback": "DeepSeek-V3.2",
     },
+    "openrouter": {
+        "key_env": "OPENROUTER_API_KEY", "model_env": "OPENROUTER_MODEL",
+        "chat_url": "https://openrouter.ai/api/v1/chat/completions",
+        "models_url": "https://openrouter.ai/api/v1/models",
+        "require": ":free",
+        "hints": ["moonshotai/kimi-k2:free",
+                  "deepseek/deepseek-chat-v3.1:free",
+                  "qwen/qwen3-235b-a22b:free"],
+        "fallback": "moonshotai/kimi-k2:free",
+    },
+    "nvidia": {
+        "key_env": "NVIDIA_API_KEY", "model_env": "NVIDIA_MODEL",
+        "chat_url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "models_url": "https://integrate.api.nvidia.com/v1/models",
+        "hints": ["nvidia/llama-3.3-nemotron-super-49b-v1.5",
+                  "nvidia/llama-3.1-nemotron-70b-instruct"],
+        "fallback": "nvidia/llama-3.1-nemotron-70b-instruct",
+    },
     "github_models": {
         "key_env": "GH_MODELS_TOKEN", "model_env": "GH_MODELS_MODEL",
         "chat_url": "https://models.github.ai/inference/chat/completions",
@@ -60,7 +78,8 @@ PROVIDER_CONFIG = {
     },
 }
 
-BENCH_PROVIDERS = ["cerebras", "sambanova", "github_models"]
+BENCH_PROVIDERS = ["cerebras", "sambanova", "github_models",
+                   "openrouter", "nvidia"]
 
 # models that are not general chat judges get filtered before ranking
 _EXCLUDE = ("embed", "whisper", "tts", "audio", "image", "vision", "ocr",
@@ -137,6 +156,8 @@ def resolve_model(provider):
         else:
             print(f"  [llm] {provider}: pinned model '{pinned}' not in "
                   f"live catalog — ignoring the pin")
+    if available and cfg.get("require"):
+        available = [a for a in available if cfg["require"] in a]
     if not pick and available:
         pick = next((h for h in cfg["hints"] if h in available), None)
         if not pick:
@@ -188,6 +209,8 @@ def ask_gemini(prompt):
 
 PROVIDERS = {
     "gemini": ask_gemini,
+    "openrouter": lambda p: _openai_style("openrouter", p),
+    "nvidia": lambda p: _openai_style("nvidia", p),
     "groq": lambda p: _openai_style("groq", p),
     "mistral": lambda p: _openai_style("mistral", p),
     "cerebras": lambda p: _openai_style("cerebras", p),
@@ -198,6 +221,28 @@ PROVIDERS = {
 # bench providers only join rotation when their key is present
 BENCH = [p for p in BENCH_PROVIDERS
          if os.environ.get(PROVIDER_CONFIG[p]["key_env"])]
+
+# explicit substitution priority: deepest free quotas first, gemini last;
+# override with a FALLBACK_ORDER repo variable (comma-separated)
+DEFAULT_FALLBACK_ORDER = ["cerebras", "groq", "mistral", "sambanova",
+                          "github_models", "openrouter", "nvidia", "gemini"]
+
+
+def _fallback_order():
+    raw = os.environ.get("FALLBACK_ORDER")
+    order = ([p.strip() for p in raw.split(",") if p.strip()]
+             if raw else DEFAULT_FALLBACK_ORDER)
+    known = [p for p in order if p in PROVIDER_CONFIG]
+    keyed = [p for p in known
+             if os.environ.get(PROVIDER_CONFIG[p]["key_env"])]
+    # anything keyed but unlisted still belongs at the back of the line
+    keyed += [p for p in PROVIDER_CONFIG
+              if p not in keyed
+              and os.environ.get(PROVIDER_CONFIG[p]["key_env"])]
+    return keyed
+
+
+FALLBACK_ORDER = _fallback_order()
 
 
 _consecutive_failures = {}
