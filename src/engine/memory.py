@@ -37,7 +37,8 @@ def validate_ticker(ticker):
 
 
 def insert_decision(ticker, action, cnn_direction, cnn_confidence,
-                    bull_case, bear_case, judge_votes, risk_gate_note):
+                    bull_case, bear_case, judge_votes, risk_gate_note,
+                    selection_source=None):
     # recording one decision with its full debate transcript
     ticker = validate_ticker(ticker)
     if action not in VALID_ACTIONS:
@@ -48,6 +49,8 @@ def insert_decision(ticker, action, cnn_direction, cnn_confidence,
            "bull_case": bull_case, "bear_case": bear_case,
            "judge_votes": judge_votes,
            "risk_gate_note": str(risk_gate_note)[:500]}
+    if selection_source:
+        row["selection_source"] = str(selection_source)[:32]
     return get_client().table("decisions").insert(row).execute()
 
 

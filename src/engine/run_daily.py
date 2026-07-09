@@ -37,7 +37,7 @@ SCAN_LIMIT = os.environ.get("SCAN_LIMIT")   # optional ticker cap for testing
 WATCHLIST = ["AAPL", "MSFT", "GOOGL", "NVDA", "JPM"]   # fallback only
 
 
-def run_ticker(ticker):
+def run_ticker(ticker, source="technical"):
     # deciding one ticker: news, packet, debate, gate, record
     ticker = validate_ticker(ticker)
     print(f"\n--- {ticker} ---")
@@ -50,7 +50,8 @@ def run_ticker(ticker):
     sig = packet["cnn_signal"]
     insert_decision(ticker, action, sig.get("direction", "unavailable"),
                     sig.get("confidence", 0.0), verdict["bull_case"],
-                    verdict["bear_case"], verdict["judge_votes"], note)
+                    verdict["bear_case"], verdict["judge_votes"], note,
+                    selection_source=source)
 
     # executing on paper only when the flag and keys are present
     if enabled():
@@ -96,6 +97,7 @@ def pick_watchlist(recently_debated, limit):
         print(f"[picks] watchlist config unavailable: {e}")
 
     picks = []
+    sources = {}
     for t in pins:
         try:
             t = validate_ticker(t)
@@ -103,6 +105,7 @@ def pick_watchlist(recently_debated, limit):
             continue
         if t not in picks:
             picks.append(t)
+            sources[t] = "user_pin"
     picks = picks[:DEBATE_BUDGET]
 
     # letting the macro scout nominate headline-driven names after user
@@ -114,9 +117,23 @@ def pick_watchlist(recently_debated, limit):
                 if t not in picks and t not in recently_debated \
                         and len(picks) < DEBATE_BUDGET:
                     picks.append(t)
+                    sources[t] = "macro_scout"
                     print(f"[picks] macro scout pinned {t}: {why}")
         except Exception as e:
             print(f"[picks] macro scout unavailable: {e}")
+
+    # news scout: names whose coverage is loud even if their charts are
+    # quiet — capped slots, cooldown respected, provenance recorded
+    if fill != "empty":
+        try:
+            from engine.news_scout import news_pins
+            for t, why in news_pins(exclude=recently_debated | set(picks)):
+                if len(picks) < DEBATE_BUDGET:
+                    picks.append(t)
+                    sources[t] = "news_scout"
+                    print(f"[picks] news scout pinned {t}: {why}")
+        except Exception as e:
+            print(f"[picks] news scout unavailable: {e}")
 
     # always scanning so screen_results and the site's scan page stay fresh
     need = DEBATE_BUDGET - len(picks)
@@ -125,10 +142,12 @@ def pick_watchlist(recently_debated, limit):
     screener_picks, scan = select_watchlist(k=k, limit=limit, exclude=exclude)
 
     if fill == "empty" and picks:
-        return picks, picks, scan
+        return picks, picks, scan, sources
     watchlist = (picks
                  + [t for t in screener_picks if t not in picks])[:DEBATE_BUDGET]
-    return watchlist, picks, scan
+    for t in watchlist:
+        sources.setdefault(t, "technical")
+    return watchlist, picks, scan, sources
 
 
 def run_daily():
@@ -155,7 +174,7 @@ def run_daily():
 
     limit = int(SCAN_LIMIT) if SCAN_LIMIT and str(SCAN_LIMIT).strip() else None
     recently_debated = set(get_recent_tickers(days=DEBATE_COOLDOWN_DAYS))
-    watchlist, picks, scan = pick_watchlist(recently_debated, limit)
+    watchlist, picks, scan, sources = pick_watchlist(recently_debated, limit)
     if scan:
         save_screen_results(scan, top_n=max(40, DEBATE_BUDGET + 10))
     print(f"debating today: {watchlist} "
@@ -166,7 +185,8 @@ def run_daily():
     results = {}
     for i, ticker in enumerate(watchlist):
         try:
-            results[ticker] = run_ticker(ticker)
+            results[ticker] = run_ticker(
+                ticker, source=sources.get(ticker, "technical"))
             record_predictions(ticker)
         except Exception as e:
             print(f"{ticker} failed: {e}")
