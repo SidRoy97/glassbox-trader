@@ -3,7 +3,7 @@
 from engine.llm_clients import ask, parse_json_reply
 from engine.data_packet import packet_to_text
 
-GROUNDING = ("RULES: the packet's evidence_reliability table grades each evidence category A (strongest) to D (weakest) — prefer higher-grade evidence when claims conflict; measured grades come from real scored outcomes and outrank priors. cnn_signal is one C-grade input among many: any case or vote that leans primarily on it without independent corroborating evidence should be treated as weak. "
+GROUNDING = ("RULES: the packet's evidence_reliability table grades each evidence category A (strongest) to D (weakest) — prefer higher-grade evidence when claims conflict; measured grades come from real scored outcomes and outrank priors. any case or vote that leans primarily on C- or D-grade evidence (check the table — this currently includes cnn_signal) without independent higher-grade corroboration should be treated as weak. "
              "Every claim must cite a field from the data packet by "
              "name (e.g. cnn_signal.rsi, technical_structure.adx, "
              "news[2].headline). claims citing facts not in the packet will "
