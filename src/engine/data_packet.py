@@ -36,6 +36,20 @@ def _rf_signal(df):
 
 
 def get_cnn_signal(ticker):
+    # stamping which model actually holds the title into the signal block
+    from engine.champion import get_champion
+    champion = "cnn1d"
+    try:
+        champion = get_champion()
+    except Exception:
+        pass
+    sig = _champion_signal(ticker)
+    if isinstance(sig, dict):
+        sig["model"] = champion
+    return sig
+
+
+def _champion_signal(ticker):
     # producing the packet signal from whichever model holds the title
     import numpy as np
     import torch
