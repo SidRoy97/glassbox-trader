@@ -10,23 +10,26 @@ WINDOW = 500                 # judging over the most recent scored decisions
 MIN_CITATIONS = 5            # hiding buckets with too little evidence
 
 BUCKETS = [
+    ("market_context", ("market_context", "spy_trend", "sector_strength")),
     ("liquidity_sweep", ("sweep",)),
     ("fvg_order_block", ("fvg", "order_block", "zone")),
     ("market_structure", ("structure",)),
     ("ema_regime", ("ema", "regime", "ma50", "200")),
     ("divergence", ("divergence",)),
     ("vix_fix_capitulation", ("capitulation", "wvf", "vix")),
-    ("first_pullback", ("pullback",)),
+
     ("range_or_squeeze", ("rang", "squeeze", "position_in_range")),
     ("market_stage", ("stage",)),
     ("connors_rsi2", ("rsi2", "connors")),
+    ("first_pullback", ("pullback",)),
     ("volume", ("volume", "poc")),
     ("candles_momentum", ("candle", "engulf", "momentum", "wick",
-                          "exhaustion", "asymmetry")),
+                          "exhaustion", "asymmetry", "inside")),
     ("adx_trend", ("adx",)),
     ("overnight_gap", ("gap",)),
     ("insider_activity", ("insider",)),
     ("congress_trading", ("congress", "senator", "stock_act")),
+    ("macro_news", ("macro",)),
     ("news_sentiment", ("news", "headline", "sentiment")),
     ("model_signal", ("cnn", "signal", "confidence", "direction")),
     ("track_record", ("track", "past_decision", "record")),
@@ -35,11 +38,34 @@ BUCKETS = [
 ]
 
 
+# packet blocks that map to one concept regardless of leaf field
+BLOCK_MAP = {
+    "macro_news": "macro_news",
+    "news": "news_sentiment",
+    "market_context": "market_context",
+    "congress_trading": "congress_trading",
+    "insider_activity": "insider_activity",
+    "cnn_signal": "model_signal",
+    "earnings": "earnings",
+    "overnight_gap": "overnight_gap",
+    "track_record": "track_record",
+    "past_decisions": "track_record",
+    "theses": "thesis_lessons",
+    "lessons": "thesis_lessons",
+}
+
+
 def _bucket(field):
-    # mapping one cited packet field onto its strategy concept
+    # mapping one cited packet field onto its strategy concept: the block
+    # prefix decides when it can, otherwise needles match the leaf only
+    # (never the block name, which would shadow every structure feature)
     f = str(field).lower()
+    head = f.split(".")[0].split("[")[0].strip()
+    if head in BLOCK_MAP:
+        return BLOCK_MAP[head]
+    leaf = f.split(".")[-1]
     for name, needles in BUCKETS:
-        if any(n in f for n in needles):
+        if any(n in leaf for n in needles):
             return name
     return "other"
 

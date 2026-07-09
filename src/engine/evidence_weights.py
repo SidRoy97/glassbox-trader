@@ -26,6 +26,10 @@ PRIOR_GRADES = {
                       "deserves caution"),
     "news_sentiment": ("B", "event-driven moves are real; sentiment is a "
                             "noisy but informative proxy"),
+    "macro_news": ("B", "market-wide events move single names through "
+                        "supply, cost, and risk-appetite channels"),
+    "market_context": ("B", "index trend and volatility regime condition "
+                            "every single-name bet"),
     "overnight_gap": ("B", "gaps carry information about overnight flows"),
     "divergence": ("C", "momentum divergence has mixed formal evidence"),
     "vix_fix_capitulation": ("C", "volatility climaxes often mark bottoms "
