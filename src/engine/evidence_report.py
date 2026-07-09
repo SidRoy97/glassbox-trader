@@ -26,6 +26,7 @@ BUCKETS = [
     ("adx_trend", ("adx",)),
     ("overnight_gap", ("gap",)),
     ("insider_activity", ("insider",)),
+    ("congress_trading", ("congress", "senator", "stock_act")),
     ("news_sentiment", ("news", "headline", "sentiment")),
     ("model_signal", ("cnn", "signal", "confidence", "direction")),
     ("track_record", ("track", "past_decision", "record")),

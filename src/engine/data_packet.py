@@ -172,6 +172,16 @@ def _macro_block():
         return None
 
 
+def _congress_block_safe(ticker):
+    # attaching congressional disclosures, tolerating any failure
+    try:
+        from engine.congress import congress_block
+        return congress_block(ticker)
+    except Exception as e:
+        print(f"  [packet] congress block failed: {e}")
+        return None
+
+
 def _insider_block(ticker):
     # attaching recent insider filing evidence, tolerating any failure
     try:
@@ -194,6 +204,7 @@ def build_packet(ticker, news_items):
         "technical_structure": _structure_block(ticker),
         "overnight_gap_pct": _overnight_gap(ticker),
         "insider_activity": _insider_block(ticker),
+        "congress_trading": _congress_block_safe(ticker),
         "evidence_reliability": _reliability_block(),
         "macro_news": _macro_block(),
         "days_to_earnings": fetch_next_earnings(ticker),

@@ -14,6 +14,8 @@ MIN_MEASURED = 10            # citations needed before data replaces prior
 PRIOR_GRADES = {
     "insider_activity": ("A", "clustered open-market insider buying is one "
                               "of the best-documented bullish signals"),
+    "congress_trading": ("B", "congressional disclosures are delayed but "
+                              "show documented anomalous returns"),
     "connors_rsi2": ("A", "published mean-reversion system with decades of "
                           "replicated backtests"),
     "market_stage": ("B", "trend and regime persistence are established "

@@ -145,6 +145,12 @@ def record_predictions(ticker):
         rows.append({"model": "ensemble", "direction": top,
                      "confidence": round(sum(agree) / len(agree), 4)})
 
+    # constant-strategy baselines: any model worth keeping must beat
+    # these; they are shadow-only and can never be elected champion
+    for const in ("Down", "Up", "Neutral"):
+        rows.append({"model": f"always_{const.lower()}",
+                     "direction": const, "confidence": 0.3333})
+
     payload = [{"pred_date": str(date.today()), "ticker": ticker, **r}
                for r in rows]
     if payload:
