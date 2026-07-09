@@ -200,7 +200,6 @@ def build_packet(ticker, news_items):
                   if n.get("sentiment") is not None]
     packet = {
         "ticker": ticker,
-        "cnn_signal": get_cnn_signal(ticker),
         "technical_structure": _structure_block(ticker),
         "overnight_gap_pct": _overnight_gap(ticker),
         "insider_activity": _insider_block(ticker),
@@ -214,6 +213,8 @@ def build_packet(ticker, news_items):
                   "sentiment": n.get("sentiment")} for n in news_items[:5]],
         "news_sentiment_avg": round(sum(sentiments) / len(sentiments), 3)
         if sentiments else None,
+        # one c-grade opinion among many, deliberately not the headline
+        "cnn_signal": get_cnn_signal(ticker),
         "recent_decisions": get_recent_decisions(ticker, limit=5),
         "lessons": get_active_lessons(limit=8),
         "active_thesis": get_active_thesis(ticker),
