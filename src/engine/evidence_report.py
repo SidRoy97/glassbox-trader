@@ -31,7 +31,7 @@ BUCKETS = [
     ("congress_trading", ("congress", "senator", "stock_act")),
     ("macro_news", ("macro",)),
     ("news_sentiment", ("news", "headline", "sentiment")),
-    ("model_signal", ("cnn", "signal", "confidence", "direction")),
+    ("model_signal", ("cnn", "signal", "model")),
     ("track_record", ("track", "past_decision", "record")),
     ("earnings", ("earnings",)),
     ("thesis_lessons", ("thesis", "lesson")),
@@ -50,7 +50,12 @@ BLOCK_MAP = {
     "overnight_gap": "overnight_gap",
     "track_record": "track_record",
     "past_decisions": "track_record",
+    "recent_decisions": "track_record",
+    "ticker_track_record": "track_record",
+    "days_to_earnings": "earnings",
+    "news_sentiment_avg": "news_sentiment",
     "theses": "thesis_lessons",
+    "active_thesis": "thesis_lessons",
     "lessons": "thesis_lessons",
 }
 
