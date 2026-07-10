@@ -6,12 +6,28 @@ from engine.panels import (run_cases, run_rebuttal, run_judges,
 
 
 def majority_vote(votes, default="NO_TRADE"):
-    # requiring a strict majority of judges, defaulting to no trade
+    # requiring a strict weighted majority of judges: every judge starts
+    # at weight 1.0 and drifts only with their own scored record; a
+    # directional verdict additionally needs at least two judges agreeing
     if not votes:
         return default
-    counts = Counter(v["vote"] for v in votes)
-    top, n = counts.most_common(1)[0]
-    return top if n > len(votes) / 2 else default
+    try:
+        from engine.judge_weights import provider_weights
+        weights = provider_weights()
+    except Exception:
+        weights = {}
+    total, tallies, heads = 0.0, {}, Counter()
+    for v in votes:
+        w = weights.get(v.get("provider"), 1.0)
+        total += w
+        tallies[v["vote"]] = tallies.get(v["vote"], 0.0) + w
+        heads[v["vote"]] += 1
+    top = max(tallies, key=tallies.get)
+    if tallies[top] <= total / 2:
+        return default
+    if top in ("BUY", "SELL") and heads[top] < 2:
+        return default
+    return top
 
 
 def decide(packet):
