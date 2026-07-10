@@ -25,7 +25,7 @@ ATR_SPAN = 22
 SWING_WINDOW = 5
 CHANDELIER_MULT = 3.0
 
-STRUCTURE_FEATURE_VERSION = "ta_structure_v3.2"
+STRUCTURE_FEATURE_VERSION = "ta_structure_v3.3"
 
 
 def _atr(df: pd.DataFrame, span: int = ATR_SPAN) -> pd.Series:
@@ -452,6 +452,22 @@ def inside_bars(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def turn_days(df: pd.DataFrame) -> pd.DataFrame:
+    # flagging the first opposite-color close after a strong directional
+    # run — the classic short entry on parabolic names, and its mirror
+    out = pd.DataFrame(index=df.index)
+    green = (df["close"] > df["open"]).astype(int)
+    red = 1 - green
+    g_run = green.groupby((green == 0).cumsum()).cumsum()
+    r_run = red.groupby((red == 0).cumsum()).cumsum()
+    ret4 = df["close"].pct_change(4)
+    strong_up = (g_run.shift(1) >= 3) | (ret4.shift(1) > 0.06)
+    strong_dn = (r_run.shift(1) >= 3) | (ret4.shift(1) < -0.06)
+    out["first_red_after_run"] = ((red == 1) & strong_up).astype(int)
+    out["first_green_after_run"] = ((green == 1) & strong_dn).astype(int)
+    return out
+
+
 def trend_volume_extras(df: pd.DataFrame) -> pd.DataFrame:
     # adding the long-term 200 ema regime and a fast/slow volume oscillator
     out = pd.DataFrame(index=df.index)
@@ -489,6 +505,7 @@ def build_structure_features(df: pd.DataFrame) -> pd.DataFrame:
         first_pullback(df),
         range_regime(df),
         inside_bars(df),
+        turn_days(df),
         trend_volume_extras(df),
     ]
     return pd.concat(parts, axis=1)
@@ -558,6 +575,8 @@ def technical_structure_block(df: pd.DataFrame) -> dict:
         "position_in_range_pct": _num("position_in_range"),
         "bb_squeeze_active": bool(last["bb_squeeze"]),
         "inside_bar_streak": int(last["inside_bar_streak"] or 0),
+        "first_red_after_run": bool(last["first_red_after_run"]),
+        "first_green_after_run": bool(last["first_green_after_run"]),
         "above_200ema": bool(last["above_ema200"]),
         "market_stage": _market_stage(last),
         "rsi2": _num("rsi2"),
