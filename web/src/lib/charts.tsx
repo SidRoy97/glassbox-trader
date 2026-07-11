@@ -7,7 +7,7 @@ import {
 } from "recharts";
 
 const GRID = "#27272a";
-const TEXT = "#71717a";
+const TEXT = "#a1a1aa";  // zinc-400, readable on dark bg
 const TOOLTIP = {
   contentStyle: { background: "#18181b", border: "1px solid #3f3f46",
                   borderRadius: 8, color: "#e4e4e7", fontSize: 12 },
@@ -41,7 +41,7 @@ export function TickerAccuracyBar({ data }:
         <XAxis dataKey="ticker" stroke={TEXT} fontSize={11} />
         <YAxis stroke={TEXT} fontSize={11} allowDecimals={false} />
         <Tooltip {...TOOLTIP} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: "#e4e4e7" }} />
         <Bar dataKey="correct" stackId="a" fill="#34d399" name="correct" />
         <Bar dataKey="wrong" stackId="a" fill="#fb7185" name="wrong" />
       </BarChart>
@@ -65,7 +65,7 @@ export function ActionPie({ data }:
           ))}
         </Pie>
         <Tooltip {...TOOLTIP} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: "#e4e4e7" }} />
       </PieChart>
     </ResponsiveContainer>
   );
@@ -84,7 +84,7 @@ export function ConfidenceLines({ data, tickers }:
         <YAxis domain={[0, 1]} stroke={TEXT} fontSize={11}
                tickFormatter={(v) => `${Math.round(v * 100)}%`} />
         <Tooltip {...TOOLTIP} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: "#e4e4e7" }} />
         {tickers.map((t, i) => (
           <Line key={t} type="monotone" dataKey={t} connectNulls
                 stroke={TICKER_COLORS[i % TICKER_COLORS.length]}
@@ -150,7 +150,7 @@ export function EquityCurve({ equity }:
         <XAxis dataKey="date" stroke={TEXT} fontSize={11} />
         <YAxis domain={["auto", "auto"]} stroke={TEXT} fontSize={11} />
         <Tooltip {...TOOLTIP} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: "#e4e4e7" }} />
         <Line type="monotone" dataKey="engine" stroke="#38bdf8"
               strokeWidth={2} dot={false} name="paper account" />
         <Line type="monotone" dataKey="spy" stroke="#71717a"
@@ -196,7 +196,7 @@ export function ModelRaceLines({ data, models }:
         <YAxis domain={[0, 1]} stroke={TEXT} fontSize={11}
                tickFormatter={(v) => `${Math.round(v * 100)}%`} />
         <Tooltip {...TOOLTIP} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: "#e4e4e7" }} />
         <ReferenceLine y={0.333} stroke="#f43f5e" strokeDasharray="4 4" />
         {models.map((m, i) => (
           <Line key={m} type="monotone" dataKey={m} connectNulls

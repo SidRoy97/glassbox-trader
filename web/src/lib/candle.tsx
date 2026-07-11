@@ -12,7 +12,7 @@ export default function CandleChart({ ticker, decisionTime }:
     const chart = createChart(ref.current, {
       height: 300,
       layout: { background: { type: ColorType.Solid, color: "transparent" },
-                textColor: "#71717a" },
+                textColor: "#a1a1aa" },  // readable on dark bg
       grid: { vertLines: { color: "#27272a" },
               horzLines: { color: "#27272a" } },
       rightPriceScale: { borderColor: "#3f3f46" },

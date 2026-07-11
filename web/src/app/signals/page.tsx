@@ -114,9 +114,14 @@ export default async function Signals() {
         triggers retraining when it decays toward random.
       </p>
 
-      {standings.length > 0 && (
+      <h2 className="text-lg font-semibold mt-8">Model tournament</h2>
+      {standings.length === 0 ? (
+        <p className="text-sm text-zinc-500 mt-1">
+          Standings appear once models have scored predictions. The tournament
+          fills in as decisions are graded against real next-day outcomes.
+        </p>
+      ) : (
         <>
-          <h2 className="text-lg font-semibold mt-8">Model tournament</h2>
           <p className="text-sm text-zinc-500 mt-1">
             Every classifier predicts the same tickers on the same days; code
             scores them all. The weekly election seats the best routable model
@@ -139,9 +144,16 @@ export default async function Signals() {
         </>
       )}
 
-      {judgeStandings.length > 0 && (
+      {/* judge section */}
+      <h2 className="text-lg font-semibold mt-8">LLM judge accuracy</h2>
+      {judgeStandings.length === 0 ? (
+        <p className="text-sm text-zinc-500 mt-1">
+          Judge accuracy appears once judges have cast scored directional
+          votes. Most early decisions are NO&nbsp;TRADE, so this fills in
+          slowly as the panel takes real positions.
+        </p>
+      ) : (
         <>
-          <h2 className="text-lg font-semibold mt-8">LLM judge accuracy</h2>
           <p className="text-sm text-zinc-500 mt-1">
             Each judge's votes measured against what the market actually did
             next day (BUY↔Up, SELL↔Down, NO TRADE↔Neutral).
