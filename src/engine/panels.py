@@ -3,8 +3,7 @@
 from engine.llm_clients import ask, parse_json_reply
 from engine.data_packet import packet_to_text
 
-GROUNDING = ("RULES: the packet's evidence_reliability table grades each evidence category A (strongest) to D (weakest) — prefer higher-grade evidence when claims conflict; measured grades come from real scored outcomes and outrank priors. any case or vote that leans primarily on C- or D-grade evidence (check the table — this currently includes cnn_signal) without independent higher-grade corroboration should be treated as weak. "
-             "Every claim must cite a field from the data packet by "
+GROUNDING = ("RULES: every claim must cite a field from the data packet by "
              "name (e.g. cnn_signal.rsi, technical_structure.adx, "
              "news[2].headline). claims citing facts not in the packet will "
              "be struck. respond with ONLY the json object, no prose before "
@@ -24,9 +23,7 @@ def _panel(env, default):
 BUY_PANEL = _panel("BULL_PANEL", "gemini,groq")
 SELL_PANEL = _panel("BEAR_PANEL", "mistral,groq")
 JUDGE_PANEL = _panel("JUDGE_PANEL", "gemini,groq,mistral")
-# substitution follows the explicit priority order: deepest free
-# quotas first, quota-poor providers last
-from engine.llm_clients import FALLBACK_ORDER as ALL_PROVIDERS
+ALL_PROVIDERS = ["gemini", "groq", "mistral"]
 
 
 def _seat_reply(prompt, preferred, used, schema):
@@ -75,12 +72,7 @@ def _judge_prompt(packet, bull, bear, bull_reb, bear_reb):
             "any claim whose evidence_field is not actually in the packet. "
             "Vote NO_TRADE when evidence is weak or balanced.\n" + GROUNDING +
             '\njson schema: {"vote": "BUY"|"SELL"|"NO_TRADE", '
-            '"reason": str, "confidence": float 0-1}. '
-            'Vote a direction when the stronger case would survive its '
-            'rebuttal; reserve NO_TRADE for genuinely balanced or '
-            'evidence-thin debates and name which evidence failed. Your '
-            'confidence must reflect evidence strength — 0.5 means you '
-            'learned nothing from the debate.\n\nBULL CASES:\n'
+            '"reason": str, "confidence": float 0-1}\n\nBULL CASES:\n'
             + json.dumps(bull, default=str)[:1200] + "\nBEAR CASES:\n"
             + json.dumps(bear, default=str)[:1200] + "\nBULL REBUTTAL:\n"
             + json.dumps(bull_reb, default=str)[:800] + "\nBEAR REBUTTAL:\n"
@@ -113,16 +105,18 @@ def run_rebuttal(packet, stance, panel, opposing_cases):
 
 
 def run_judges(packet, bull, bear, bull_reb, bear_reb):
-    # collecting independent votes, each judge seat from a distinct provider
-    # dropping both rebuttals when either side's is missing, so an outage
-    # can never hand one side the last word before the vote
-    if bool(bull_reb) != bool(bear_reb):
-        print("  [panel] asymmetric rebuttals — judging on opening "
-              "cases only")
-        bull_reb, bear_reb = [], []
+    # collecting independent votes, each judge seat from a distinct provider;
+    # seat order comes from the weighted-exploration rotation so every
+    # provider builds a record and a better dark horse can earn its way in
     prompt = _judge_prompt(packet, bull, bear, bull_reb, bear_reb)
+    try:
+        from engine.judge_rotation import choose_panel
+        panel = choose_panel("judge", JUDGE_PANEL, ALL_PROVIDERS,
+                             len(JUDGE_PANEL))
+    except Exception:
+        panel = JUDGE_PANEL
     votes, used = [], set()
-    for provider in JUDGE_PANEL:
+    for provider in panel:
         reply = _seat_reply(prompt, provider, used, VOTE_SCHEMA)
         if reply and reply.get("vote") in ("BUY", "SELL", "NO_TRADE"):
             votes.append(reply)
