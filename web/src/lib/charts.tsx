@@ -11,6 +11,8 @@ const TEXT = "#a1a1aa";  // zinc-400, readable on dark bg
 const TOOLTIP = {
   contentStyle: { background: "#18181b", border: "1px solid #3f3f46",
                   borderRadius: 8, color: "#e4e4e7", fontSize: 12 },
+  itemStyle: { color: "#e4e4e7" },
+  labelStyle: { color: "#a1a1aa" },
 };
 
 export function CumulativeAccuracy({ data }:
