@@ -18,6 +18,9 @@ BUCKETS = [
     ("divergence", ("divergence",)),
     ("vix_fix_capitulation", ("capitulation", "wvf", "vix")),
 
+    ("prior_day_break", ("prior_high", "prior_low", "prior_range",
+                         "gap_above", "gap_below", "failed_gap",
+                         "close_in_prior")),
     ("range_or_squeeze", ("rang", "squeeze", "position_in_range")),
     ("market_stage", ("stage",)),
     ("connors_rsi2", ("rsi2", "connors")),

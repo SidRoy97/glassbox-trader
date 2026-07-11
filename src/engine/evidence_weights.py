@@ -28,6 +28,9 @@ PRIOR_GRADES = {
                             "noisy but informative proxy"),
     "macro_news": ("B", "market-wide events move single names through "
                         "supply, cost, and risk-appetite channels"),
+    "prior_day_break": ("C", "gaps and closes beyond the prior day's range "
+                            "signal breakout or failed-breakout structure; "
+                            "unproven on daily S&P names until measured"),
     "market_context": ("B", "index trend and volatility regime condition "
                             "every single-name bet"),
     "overnight_gap": ("B", "gaps carry information about overnight flows"),
