@@ -30,11 +30,25 @@ def majority_vote(votes, default="NO_TRADE"):
         total += 100.0 * w
         tallies[v["vote"]] = tallies.get(v["vote"], 0.0) + pts
         heads[v["vote"]] += 1
+    conf_sum = {}
+    for v in votes:
+        try:
+            c = min(1.0, max(0.0, float(v.get("confidence", 0.5))))
+        except (TypeError, ValueError):
+            c = 0.5
+        conf_sum[v["vote"]] = conf_sum.get(v["vote"], 0.0) + c
     top = max(tallies, key=tallies.get)
-    if tallies[top] < total * (2.0 / 3.0):
+    # a weighted majority of points carries the vote, but a directional
+    # verdict also needs two heads and genuine conviction — the agreeing
+    # judges must average at least 0.6 confidence, so confident pairs
+    # trade while coin-flip votes still abstain
+    if tallies[top] <= total / 2:
         return default
-    if top in ("BUY", "SELL") and heads[top] < 2:
-        return default
+    if top in ("BUY", "SELL"):
+        if heads[top] < 2:
+            return default
+        if conf_sum[top] / heads[top] < 0.6:
+            return default
     return top
 
 

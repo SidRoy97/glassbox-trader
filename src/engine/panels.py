@@ -75,7 +75,12 @@ def _judge_prompt(packet, bull, bear, bull_reb, bear_reb):
             "any claim whose evidence_field is not actually in the packet. "
             "Vote NO_TRADE when evidence is weak or balanced.\n" + GROUNDING +
             '\njson schema: {"vote": "BUY"|"SELL"|"NO_TRADE", '
-            '"reason": str, "confidence": float 0-1}\n\nBULL CASES:\n'
+            '"reason": str, "confidence": float 0-1}. '
+            'Vote a direction when the stronger case would survive its '
+            'rebuttal; reserve NO_TRADE for genuinely balanced or '
+            'evidence-thin debates and name which evidence failed. Your '
+            'confidence must reflect evidence strength — 0.5 means you '
+            'learned nothing from the debate.\n\nBULL CASES:\n'
             + json.dumps(bull, default=str)[:1200] + "\nBEAR CASES:\n"
             + json.dumps(bear, default=str)[:1200] + "\nBULL REBUTTAL:\n"
             + json.dumps(bull_reb, default=str)[:800] + "\nBEAR REBUTTAL:\n"
