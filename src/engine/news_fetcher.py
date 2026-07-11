@@ -218,9 +218,42 @@ def score_sentiment(text):
         return None
 
 
+def fetch_alpaca_news(ticker, limit=8):
+    # third news source: alpaca's news api, using the trading keys we
+    # already hold — engaged when the primary feeds come back empty
+    import os
+    import requests
+    key = os.environ.get("ALPACA_API_KEY")
+    sec = os.environ.get("ALPACA_SECRET_KEY")
+    if not (key and sec):
+        return []
+    try:
+        r = requests.get("https://data.alpaca.markets/v1beta1/news",
+                         params={"symbols": ticker, "limit": limit},
+                         headers={"APCA-API-KEY-ID": key,
+                                  "APCA-API-SECRET-KEY": sec}, timeout=10)
+        r.raise_for_status()
+        out = []
+        for a in (r.json() or {}).get("news", []):
+            out.append({"ticker": ticker,
+                        "headline": (a.get("headline") or "")[:300],
+                        "summary": (a.get("summary") or "")[:500],
+                        "source": a.get("source") or "alpaca",
+                        "url": a.get("url") or "",
+                        "published_at": a.get("created_at")})
+        return out
+    except Exception as e:
+        print(f"  [news] alpaca fallback failed: {e}")
+        return []
+
+
 def fetch_and_archive(ticker, top_n=5):
-    # combining both sources, scoring, archiving, returning the freshest few
+    # combining sources with a fallback ladder so one provider outage or a
+    # retired endpoint can never blind the packet: yahoo rss + finnhub
+    # first, alpaca news when both come back empty
     items = dedupe(fetch_yahoo_rss(ticker) + fetch_finnhub(ticker))
+    if not items:
+        items = dedupe(fetch_alpaca_news(ticker))
     for it in items:
         it["sentiment"] = score_sentiment(
             f"{it['headline']} {it.get('summary') or ''}")

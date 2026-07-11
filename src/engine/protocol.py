@@ -6,9 +6,12 @@ from engine.panels import (run_cases, run_rebuttal, run_judges,
 
 
 def majority_vote(votes, default="NO_TRADE"):
-    # requiring a strict weighted majority of judges: every judge starts
-    # at weight 1.0 and drifts only with their own scored record; a
-    # directional verdict additionally needs at least two judges agreeing
+    # scoring the panel on a 300-point scale: each judge seat carries 100
+    # points, scaled by that provider's earned importance (0.75-1.35, from
+    # its own scored record) and dampened conviction (0.5 + 0.5*confidence,
+    # so miscalibrated confidence can sway but never dominate). an action
+    # needs two thirds of the points present AND at least two judges
+    # voting that direction — one judge alone can never trade
     if not votes:
         return default
     try:
@@ -19,11 +22,16 @@ def majority_vote(votes, default="NO_TRADE"):
     total, tallies, heads = 0.0, {}, Counter()
     for v in votes:
         w = weights.get(v.get("provider"), 1.0)
-        total += w
-        tallies[v["vote"]] = tallies.get(v["vote"], 0.0) + w
+        try:
+            conf = min(1.0, max(0.0, float(v.get("confidence", 0.5))))
+        except (TypeError, ValueError):
+            conf = 0.5
+        pts = 100.0 * w * (0.5 + 0.5 * conf)
+        total += 100.0 * w
+        tallies[v["vote"]] = tallies.get(v["vote"], 0.0) + pts
         heads[v["vote"]] += 1
     top = max(tallies, key=tallies.get)
-    if tallies[top] <= total / 2:
+    if tallies[top] < total * (2.0 / 3.0):
         return default
     if top in ("BUY", "SELL") and heads[top] < 2:
         return default
