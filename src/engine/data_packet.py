@@ -212,10 +212,18 @@ def build_packet(ticker, news_items):
     ticker = validate_ticker(ticker)
     sentiments = [n.get("sentiment") for n in news_items[:5]
                   if n.get("sentiment") is not None]
+    _gap = _overnight_gap(ticker)
+    # a meaningful gap with no news catalyst is "gapping to air" — the
+    # corpus flags these as fade-prone versus catalyst-backed gaps which
+    # carry a real thesis; naming the combination lets judges weigh it
+    # directly instead of inferring it across two separate blocks
+    _has_catalyst = any(abs(s) > 0.15 for s in sentiments)
     packet = {
         "ticker": ticker,
         "technical_structure": _structure_block(ticker),
-        "overnight_gap_pct": _overnight_gap(ticker),
+        "overnight_gap_pct": _gap,
+        "overnight_gap_no_catalyst": bool(
+            _gap is not None and abs(_gap) >= 1.5 and not _has_catalyst),
         "insider_activity": _insider_block(ticker),
         "congress_trading": _congress_block_safe(ticker),
         "evidence_reliability": _reliability_block(),
