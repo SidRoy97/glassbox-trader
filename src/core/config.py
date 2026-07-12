@@ -10,7 +10,9 @@ OBS_PATH = os.path.join(BASE_PATH, "observations")
 for _p in (DATA_PATH, MODEL_PATH, OBS_PATH):
     os.makedirs(_p, exist_ok=True)
 
+# kaggle no longer used — yfinance loads recent S&P 500 data
 KAGGLE_DATASET = "dgawlik/nyse"
+YF_HISTORY_YEARS = int(os.environ.get("YF_HISTORY_YEARS", "10"))
 KAGGLE_FILES = ["prices-split-adjusted.csv", "fundamentals.csv",
                 "securities.csv", "prices.csv"]
 
@@ -38,8 +40,8 @@ HORIZONS = {"1d": {"days": 1, "threshold": 0.01},
             "5d": {"days": 5, "threshold": 0.02},
             "10d": {"days": 10, "threshold": 0.03}}
 
-TRAIN_END = "2015-01-01"
-VAL_END = "2016-01-01"
+TRAIN_END = "2023-01-01"
+VAL_END = "2024-06-01"
 RANDOM_STATE = 42
 
 SEQ_WINDOW = 30
@@ -48,6 +50,6 @@ SEQ_BATCH = 256
 SEQ_THRESHOLD = 0.01
 PER_STOCK_SAMPLE = 40
 
-OOS_START = "2016-06-01"
-OOS_EVAL_FROM = "2017-01-01"
-OOS_END = "2025-12-31"
+OOS_START = "2024-06-01"
+OOS_EVAL_FROM = "2024-06-01"
+OOS_END = "2026-12-31"
