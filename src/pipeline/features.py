@@ -12,21 +12,38 @@ def add_indicators(group):
     # computing indicators for one ticker so nothing bleeds across stocks
     import pandas_ta as ta
     group = group.copy()
-    group["ma10"] = group["close"].rolling(10).mean()
-    group["ma30"] = group["close"].rolling(30).mean()
-    group["ma50"] = group["close"].rolling(50).mean()
-    group["rsi"] = ta.rsi(group["close"], length=14)
-    group["vol_ratio"] = group["volume"] / group["volume"].rolling(20).mean()
-
-    # assigning macd columns directly to keep index alignment safe
-    macd = ta.macd(group["close"], fast=12, slow=26, signal=9)
-    for col in macd.columns:
-        group[col] = macd[col].values
-
-    # assigning bollinger columns directly for the same reason
-    bb = ta.bbands(group["close"], length=20, std=2)
-    for col in bb.columns:
-        group[col] = bb[col].values
+    # a short or gap-ridden ticker can make macd/bbands return None or crash
+    # inside pandas_ta; guard on length AND wrap the computation so any problem
+    # ticker is dropped from the universe rather than killing the whole run
+    if len(group) < 60:
+        return group.iloc[0:0]
+    close = group["close"]
+    if close.isna().any() or (close <= 0).any():
+        group = group[close.notna() & (close > 0)].copy()
+        if len(group) < 60:
+            return group.iloc[0:0]
+        close = group["close"]
+    try:
+        group["ma10"] = close.rolling(10).mean()
+        group["ma30"] = close.rolling(30).mean()
+        group["ma50"] = close.rolling(50).mean()
+        group["rsi"] = ta.rsi(close, length=14)
+        group["vol_ratio"] = (group["volume"]
+                              / group["volume"].rolling(20).mean())
+        macd = ta.macd(close, fast=12, slow=26, signal=9)
+        if macd is None or macd.empty:
+            return group.iloc[0:0]
+        for col in macd.columns:
+            group[col] = macd[col].values
+        bb = ta.bbands(close, length=20, std=2)
+        if bb is None or bb.empty:
+            return group.iloc[0:0]
+        for col in bb.columns:
+            group[col] = bb[col].values
+    except Exception as e:
+        sym = group["symbol"].iloc[0] if "symbol" in group.columns else "?"
+        print(f"  [features] skipping {sym}: indicator error ({e})")
+        return group.iloc[0:0]
     return group
 
 
