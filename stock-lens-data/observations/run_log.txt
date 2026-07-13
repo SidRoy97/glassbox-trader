@@ -580,3 +580,307 @@ random forest loaded: True
 chat ready — ask naturally, e.g. 'Will Apple go up tomorrow?'
 type 'quit' to exit
 sequence model unavailable (No module named 'sequence_models')
+downloading 60 tickers from yfinance (2025-11-10 to 2026-07-09)...
+downloaded 9,840 rows across 60 tickers
+rebuilding features on out-of-sample data...
+screener: scanned 60 tickers, top: ['AMD', 'AMAT', 'APH', 'ANET', 'AZO']
+
+======================================================================
+STAGE 2 — FEATURE ENGINEERING, LABELS, SPLIT
+======================================================================
+
+======================================================================
+STAGE 1 — LOADING S&P 500 DATA (yfinance, recent)
+======================================================================
+S&P 500 wiki fetch failed (HTTP Error 403: Forbidden); using cached securities.csv
+downloading 505 S&P 500 tickers from yfinance (10y)...
+cached prices to /Users/sidroy/Desktop/venv/ml/project/glassbox-trader/stock-lens-data/data/prices-split-adjusted.csv
+prices shape      : (1033254, 7)
+fundamentals shape: (4521, 11)
+securities shape  : (505, 8)
+date range        : 2016-07-11 to 2026-07-10
+unique tickers    : 411
+  [plot saved] s1_trading_days_per_ticker.png
+  [plot saved] s1_close_price_distribution.png
+  [plot saved] s1_sample_ticker_prices.png
+  [plot saved] s1_total_market_volume.png
+stage 1 complete
+  [plot saved] s2_tickers_per_sector.png
+computing technical indicators...
+
+======================================================================
+STAGE 2B — ENHANCED FEATURES + MULTI-HORIZON LABELS
+======================================================================
+
+======================================================================
+STAGE 3 — BASELINE CLASSIFICATION (POOLED, NEXT-DAY)
+======================================================================
+
+======================================================================
+STAGE 4 — SEQUENCE MODELS
+======================================================================
+cuda available: False
+
+======================================================================
+STAGE 2 — FEATURE ENGINEERING, LABELS, SPLIT
+======================================================================
+
+======================================================================
+STAGE 1 — LOADING S&P 500 DATA (yfinance, recent)
+======================================================================
+S&P 500 wiki fetch failed (HTTP Error 403: Forbidden); using cached securities.csv
+cached prices present, loading from disk
+prices shape      : (1033254, 7)
+fundamentals shape: (4521, 11)
+securities shape  : (505, 8)
+date range        : 2016-07-11 to 2026-07-10
+unique tickers    : 411
+  [plot saved] s1_trading_days_per_ticker.png
+  [plot saved] s1_close_price_distribution.png
+  [plot saved] s1_sample_ticker_prices.png
+  [plot saved] s1_total_market_volume.png
+stage 1 complete
+  [plot saved] s2_tickers_per_sector.png
+computing technical indicators...
+
+======================================================================
+STAGE 2B — ENHANCED FEATURES + MULTI-HORIZON LABELS
+======================================================================
+
+======================================================================
+STAGE 3 — BASELINE CLASSIFICATION (POOLED, NEXT-DAY)
+======================================================================
+
+======================================================================
+STAGE 4 — SEQUENCE MODELS
+======================================================================
+cuda available: False
+
+======================================================================
+STAGE 2 — FEATURE ENGINEERING, LABELS, SPLIT
+======================================================================
+
+======================================================================
+STAGE 1 — LOADING S&P 500 DATA (yfinance, recent)
+======================================================================
+S&P 500 wiki fetch failed (HTTP Error 403: Forbidden); using cached securities.csv
+cached prices present, loading from disk
+prices shape      : (1033254, 7)
+fundamentals shape: (4521, 11)
+securities shape  : (505, 8)
+date range        : 2016-07-11 to 2026-07-10
+unique tickers    : 411
+  [plot saved] s1_trading_days_per_ticker.png
+  [plot saved] s1_close_price_distribution.png
+  [plot saved] s1_sample_ticker_prices.png
+  [plot saved] s1_total_market_volume.png
+stage 1 complete
+  [plot saved] s2_tickers_per_sector.png
+computing technical indicators...
+
+======================================================================
+STAGE 2 — FEATURE ENGINEERING, LABELS, SPLIT
+======================================================================
+
+======================================================================
+STAGE 1 — LOADING S&P 500 DATA (yfinance, recent)
+======================================================================
+S&P 500 wiki fetch failed (HTTP Error 403: Forbidden); using cached securities.csv
+cached prices present, loading from disk
+prices shape      : (1033254, 7)
+fundamentals shape: (4521, 11)
+securities shape  : (505, 8)
+date range        : 2016-07-11 to 2026-07-10
+unique tickers    : 411
+  [plot saved] s1_trading_days_per_ticker.png
+  [plot saved] s1_close_price_distribution.png
+  [plot saved] s1_sample_ticker_prices.png
+  [plot saved] s1_total_market_volume.png
+stage 1 complete
+  [plot saved] s2_tickers_per_sector.png
+computing technical indicators...
+shape after indicators: (999636, 27)
+shape after cleanup: (979184, 36)
+  [plot saved] s2_label_distribution.png
+label distribution:
+label
+Neutral    52.5
+Up         24.9
+Down       22.6
+Name: proportion, dtype: float64
+  [plot saved] s2_AAPL_indicator_panel.png
+  [plot saved] s2_feature_correlation.png
+train: (628099, 38) | val: (140935, 38) | test: (209741, 38)
+stage 2 complete
+
+======================================================================
+STAGE 2B — ENHANCED FEATURES + MULTI-HORIZON LABELS
+======================================================================
+adding lagged features...
+adding return features...
+adding multi-horizon labels...
+  [plot saved] s2b_horizon_label_distributions.png
+dropped 8,180 rows with nulls in essentials
+enhanced master shape: (970595, 72)
+stage 2b complete
+
+======================================================================
+STAGE 3 — BASELINE CLASSIFICATION (POOLED, NEXT-DAY)
+======================================================================
+training random forest...
+random forest — validation:
+              precision    recall  f1-score   support
+
+        Down       0.24      0.24      0.24     30587
+     Neutral       0.60      0.57      0.59     76877
+          Up       0.27      0.30      0.28     33471
+
+    accuracy                           0.44    140935
+   macro avg       0.37      0.37      0.37    140935
+weighted avg       0.45      0.44      0.44    140935
+
+training xgboost...
+xgboost — validation:
+              precision    recall  f1-score   support
+
+        Down       0.25      0.27      0.26     30587
+     Neutral       0.61      0.55      0.58     76877
+          Up       0.27      0.31      0.29     33471
+
+    accuracy                           0.43    140935
+   macro avg       0.38      0.38      0.38    140935
+weighted avg       0.45      0.43      0.44    140935
+
+  [plot saved] s3_rf_confusion_val.png
+  [plot saved] s3_xgb_confusion_val.png
+
+======================================================================
+STAGE 4 — SEQUENCE MODELS
+======================================================================
+cuda available: False
+
+======================================================================
+POOLED SEQUENCES (train/val/test)
+======================================================================
+train seq: (611465, 30, 53) | val: (128628, 30, 53) | test: (193209, 30, 53)
+
+======================================================================
+STAGE 3 — BASELINE CLASSIFICATION (POOLED, NEXT-DAY)
+======================================================================
+training random forest...
+random forest — validation:
+              precision    recall  f1-score   support
+
+        Down       0.25      0.24      0.25     30587
+     Neutral       0.60      0.58      0.59     76877
+          Up       0.27      0.30      0.28     33471
+
+    accuracy                           0.44    140935
+   macro avg       0.37      0.37      0.37    140935
+weighted avg       0.45      0.44      0.44    140935
+
+training xgboost...
+xgboost — validation:
+              precision    recall  f1-score   support
+
+        Down       0.25      0.27      0.26     30587
+     Neutral       0.61      0.55      0.58     76877
+          Up       0.27      0.31      0.29     33471
+
+    accuracy                           0.43    140935
+   macro avg       0.38      0.38      0.38    140935
+weighted avg       0.45      0.43      0.44    140935
+
+  [plot saved] s3_rf_confusion_val.png
+  [plot saved] s3_xgb_confusion_val.png
+  [plot saved] s3_rf_feature_importance.png
+best baseline model: xgb
+xgb — TEST:
+              precision    recall  f1-score   support
+
+        Down       0.27      0.32      0.29     49263
+     Neutral       0.58      0.49      0.53    105837
+          Up       0.29      0.34      0.31     54641
+
+    accuracy                           0.41    209741
+   macro avg       0.38      0.38      0.38    209741
+weighted avg       0.43      0.41      0.42    209741
+
+saved baseline models
+stage 3 complete
+
+======================================================================
+STAGE 4 — SEQUENCE MODELS
+======================================================================
+cuda available: False
+
+======================================================================
+POOLED SEQUENCES (train/val/test)
+======================================================================
+train seq: (611465, 30, 44) | val: (128628, 30, 44) | test: (193209, 30, 44)
+  pooled | lstm        | regression     | VAL f1=0.3545
+  pooled | lstm        | classification | VAL f1=0.4887
+  pooled | gru         | regression     | VAL f1=0.3439
+  pooled | gru         | classification | VAL f1=0.4917
+  pooled | tcn         | regression     | VAL f1=0.1788
+  pooled | tcn         | classification | VAL f1=0.4931
+  pooled | cnn1d       | regression     | VAL f1=0.3800
+  pooled | cnn1d       | classification | VAL f1=0.4967
+  pooled | transformer | regression     | VAL f1=0.2478
+  pooled | transformer | classification | VAL f1=0.4930
+
+validation winner: cnn1d/classification (val f1=0.4967)
+[TEST] cnn1d/classification — held-out test macro_f1 = 0.4937
+              precision    recall  f1-score   support
+
+        Down       0.42      0.40      0.41     59447
+     Neutral       0.64      0.72      0.68     73685
+          Up       0.42      0.38      0.39     60077
+
+    accuracy                           0.51    193209
+   macro avg       0.49      0.50      0.49    193209
+weighted avg       0.50      0.51      0.51    193209
+
+refitting winner on train+val for deployment...
+saved seq_model.pt, seq_meta.pkl, seq_scaler.pkl
+
+======================================================================
+PER-STOCK SEQUENCES (sample of 40)
+======================================================================
+  per-stock | lstm        | regression     | avg f1=0.2841
+  per-stock | lstm        | classification | avg f1=0.2492
+  per-stock | gru         | regression     | avg f1=0.2972
+  per-stock | gru         | classification | avg f1=0.2721
+  per-stock | tcn         | regression     | avg f1=0.2474
+  per-stock | tcn         | classification | avg f1=0.2343
+  per-stock | cnn1d       | regression     | avg f1=0.2815
+  per-stock | cnn1d       | classification | avg f1=0.2627
+  per-stock | transformer | regression     | avg f1=0.3011
+  per-stock | transformer | classification | avg f1=0.2523
+
+SEQUENCE MODEL RESULTS:
+architecture           head granularity split  macro_f1
+        lstm     regression      pooled   val  0.354504
+        lstm classification      pooled   val  0.488704
+         gru     regression      pooled   val  0.343872
+         gru classification      pooled   val  0.491667
+         tcn     regression      pooled   val  0.178825
+         tcn classification      pooled   val  0.493149
+       cnn1d     regression      pooled   val  0.380016
+       cnn1d classification      pooled   val  0.496696
+ transformer     regression      pooled   val  0.247803
+ transformer classification      pooled   val  0.492980
+       cnn1d classification      pooled  test  0.493685
+        lstm     regression   per_stock   val  0.284118
+        lstm classification   per_stock   val  0.249206
+         gru     regression   per_stock   val  0.297166
+         gru classification   per_stock   val  0.272122
+         tcn     regression   per_stock   val  0.247430
+         tcn classification   per_stock   val  0.234258
+       cnn1d     regression   per_stock   val  0.281461
+       cnn1d classification   per_stock   val  0.262678
+ transformer     regression   per_stock   val  0.301080
+ transformer classification   per_stock   val  0.252278
+  [plot saved] s4_pooled_sequence_macro_f1.png
+  [plot saved] s4_granularity_comparison.png
+stage 4 complete
