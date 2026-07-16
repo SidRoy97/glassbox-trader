@@ -69,13 +69,22 @@ def market_summary():
     # composing a factual market snapshot from index and volatility data
     import yfinance as yf
     parts = []
+    import pandas as pd
     for name, sym in [("S&P 500", "SPY"), ("Nasdaq 100", "QQQ")]:
         try:
-            closes = yf.download(sym, period="10d", auto_adjust=True,
-                                 progress=False)["Close"].squeeze()
-            d1 = closes.pct_change().iloc[-1] * 100
-            d5 = closes.pct_change(5).iloc[-1] * 100
-            parts.append(f"{name} {d1:+.1f}% last session, {d5:+.1f}% over 5 days")
+            raw = yf.download(sym, period="15d", auto_adjust=True,
+                              progress=False)
+            if isinstance(raw.columns, pd.MultiIndex):
+                raw.columns = raw.columns.get_level_values(0)
+            closes = raw["Close"].squeeze().dropna()
+            if len(closes) < 6:
+                continue
+            d1 = (closes.iloc[-1] / closes.iloc[-2] - 1) * 100
+            d5 = (closes.iloc[-1] / closes.iloc[-6] - 1) * 100
+            if pd.isna(d1) or pd.isna(d5):
+                continue
+            parts.append(f"{name} {d1:+.1f}% last session, "
+                         f"{d5:+.1f}% over 5 days")
         except Exception:
             continue
     try:
@@ -248,11 +257,14 @@ def latest_prices(tickers):
         try:
             hist = yf.download(t.replace(".", "-"), period="10d",
                                auto_adjust=True, progress=False)
-            closes = hist["Close"].squeeze()
+            closes = hist["Close"].squeeze().dropna()
+            if len(closes) < 2:
+                continue
+            r1 = closes.iloc[-1] / closes.iloc[-2] - 1
+            r5 = (closes.iloc[-1] / closes.iloc[-6] - 1) if len(closes) > 5 else None
             out[t] = {"close": float(closes.iloc[-1]),
-                      "ret_1d": float(closes.pct_change().iloc[-1]),
-                      "ret_5d": float(closes.pct_change(5).iloc[-1])
-                      if len(closes) > 5 else None}
+                      "ret_1d": None if pd.isna(r1) else float(r1),
+                      "ret_5d": None if (r5 is None or pd.isna(r5)) else float(r5)}
         except Exception:
             out[t] = None
     return out
