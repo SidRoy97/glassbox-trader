@@ -49,7 +49,7 @@ def sync_closed_trades():
             take = min(remaining, lot["qty"])
             pnl = (price - lot["price"]) * take
             closed.append({
-                "exit_fill_id": f["id"],
+                "exit_fill_id": f"{f['id']}:{len(closed)}",
                 "ticker": symbol.replace("-", "."),
                 "qty": take,
                 "entry_price": lot["price"],
