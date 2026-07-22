@@ -1,3 +1,4 @@
+
 """running the morning decision loop, outcome scoring, and thesis review"""
 
 import os
@@ -439,6 +440,14 @@ def weekly_review():
     paper_report()
     distill_lessons()
     elect_champion()
+    # signal-1 health: drift (is the champion decaying toward random?) and
+    # calibration (does stated confidence mean accuracy?). read-only alerting;
+    # the auto-derisk it drives happens in execution at entry time.
+    try:
+        from engine.signal_health import health_report
+        health_report()
+    except Exception as e:
+        print(f"signal health report failed: {e}")
     from engine.retrain_trigger import maybe_trigger_retrain
     maybe_trigger_retrain()
     try:
@@ -463,19 +472,3 @@ def weekly_review():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", default="daily",
-                        choices=["daily", "score", "weekly", "manage"])
-    args = parser.parse_args()
-    if args.mode == "daily":
-        run_daily()
-    elif args.mode == "manage":
-        run_manage()
-    elif args.mode == "score":
-        score_outcomes()
-        score_model_predictions()
-    else:
-        weekly_review()
-
-
-if __name__ == "__main__":
-    main()
