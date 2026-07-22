@@ -12,14 +12,14 @@ load_dotenv()
 PAPER_URL = "https://paper-api.alpaca.markets/v2"
 LIVE_URL = "https://api.alpaca.markets/v2"
 LIVE_CONFIRM_SENTINEL = "I_UNDERSTAND_REAL_MONEY"
-RISK_PER_TRADE = 0.01        # risking one percent of equity per position
-STOP_ATR_MULT = 1.5          # placing the stop this many ATRs below entry
-REWARD_RISK = 2.0            # placing the runner half's target at two r
-PARTIAL_R = 1.0              # banking the scalp half at one r of profit
-MAX_POSITION_FRACTION = 0.10  # capping any position at ten percent of equity
-MAX_DRAWDOWN_HALT = 0.10     # halting new entries past this peak-to-now drawdown
-MAX_HOLD_DAYS = 10           # closing stale positions unless a thesis backs them
-EARNINGS_BLACKOUT_DAYS = 2   # refusing fresh risk right before earnings
+RISK_PER_TRADE = float(os.environ.get("RISK_PER_TRADE", "0.01"))        # risking one percent of equity per position
+STOP_ATR_MULT = float(os.environ.get("STOP_ATR_MULT", "1.5"))          # placing the stop this many ATRs below entry
+REWARD_RISK = float(os.environ.get("REWARD_RISK", "2.0"))            # placing the runner half's target at two r
+PARTIAL_R = float(os.environ.get("PARTIAL_R", "1.0"))              # banking the scalp half at one r of profit
+MAX_POSITION_FRACTION = float(os.environ.get("MAX_POSITION_FRACTION", "0.10"))  # capping any position at ten percent of equity
+MAX_DRAWDOWN_HALT = float(os.environ.get("MAX_DRAWDOWN_HALT", "0.10"))     # halting new entries past this peak-to-now drawdown
+MAX_HOLD_DAYS = int(os.environ.get("MAX_HOLD_DAYS", "10"))           # closing stale positions unless a thesis backs them
+EARNINGS_BLACKOUT_DAYS = int(os.environ.get("EARNINGS_BLACKOUT_DAYS", "2"))   # refusing fresh risk right before earnings
 
 
 def trading_mode():
