@@ -472,3 +472,19 @@ def weekly_review():
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", default="daily",
+                        choices=["daily", "score", "weekly", "manage"])
+    args = parser.parse_args()
+    if args.mode == "daily":
+        run_daily()
+    elif args.mode == "manage":
+        run_manage()
+    elif args.mode == "score":
+        score_outcomes()
+        score_model_predictions()
+    else:
+        weekly_review()
+
+
+if __name__ == "__main__":
+    main()
