@@ -77,6 +77,57 @@ def drift_status():
             "risk_multiplier": mult}
 
 
+def regime_status(window=None):
+    # reading the MARKET REGIME from the always_neutral baseline: when a large
+    # share of recent days are genuinely Neutral (no significant move), the
+    # market is in a nowhere regime where directional trades lose — the safe
+    # play is to trade less. this is a STABLE market-state measure over many
+    # scored predictions, NOT a reaction to recent trade P&L (which would be
+    # chasing noise). returns a regime label + a cap multiplier in [0.25, 1.0].
+    win = int(window or os.environ.get("REGIME_WINDOW", "200"))
+    try:
+        rows = get_client().table("model_predictions") \
+            .select("model,was_correct,outcome_label") \
+            .not_.is_("scored_at", "null") \
+            .order("pred_date", desc=True).limit(win * 14).execute().data or []
+    except Exception as e:
+        return {"regime": "unknown", "cap_multiplier": 1.0, "detail": str(e)}
+
+    # neutral share = how often the actual outcome was Neutral recently
+    outcomes = [r.get("outcome_label") for r in rows
+                if r.get("outcome_label") is not None][: win * 3]
+    if len(outcomes) < 30:
+        return {"regime": "insufficient_data", "cap_multiplier": 1.0,
+                "neutral_share": None}
+    neutral_share = sum(1 for o in outcomes if o == "Neutral") / len(outcomes)
+
+    # thresholds (env-tunable). above HIGH -> nowhere market, trade minimally;
+    # below LOW -> directional market, full flexibility; linear in between.
+    hi = float(os.environ.get("REGIME_NEUTRAL_HIGH", "0.55"))
+    lo = float(os.environ.get("REGIME_NEUTRAL_LOW", "0.40"))
+    floor = float(os.environ.get("REGIME_CAP_FLOOR", "0.25"))
+    if neutral_share >= hi:
+        mult, regime = floor, "neutral_dominated"
+    elif neutral_share <= lo:
+        mult, regime = 1.0, "directional"
+    else:
+        frac = (hi - neutral_share) / (hi - lo)   # 0 at hi .. 1 at lo
+        mult = round(floor + (1.0 - floor) * frac, 3)
+        regime = "mixed"
+    return {"regime": regime, "neutral_share": round(neutral_share, 3),
+            "cap_multiplier": mult, "n": len(outcomes)}
+
+
+def regime_cap_multiplier():
+    # the single number risk_gate multiplies the flexible daily cap by. always
+    # in [floor, 1.0]; defaults to 1.0 when data is thin so it never tightens
+    # without evidence. can only REDUCE trade frequency in nowhere markets and
+    # RESTORE it when the market turns directional — it cannot chase trade P&L.
+    if os.environ.get("REGIME_CAP", "1") != "1":
+        return 1.0
+    return regime_status().get("cap_multiplier", 1.0)
+
+
 def calibration_report(buckets=((0.0, 0.5), (0.5, 0.6), (0.6, 0.7),
                                 (0.7, 0.85), (0.85, 1.01))):
     # does higher stated confidence actually mean higher accuracy? if not, the
@@ -112,7 +163,8 @@ def agreement_multiplier(ticker):
     # exclude the constant baselines and ensemble from the agreement vote
     votes = [r["direction"] for r in rows
              if not r["model"].startswith("always_")
-             and r["model"] != "ensemble"]
+             and r["model"] != "ensemble"
+             and not str(r["model"]).endswith("_5d")]
     if len(votes) < 3:
         return 1.0, None            # not enough to judge; don't penalize
     top = max(set(votes), key=votes.count)
@@ -122,6 +174,36 @@ def agreement_multiplier(ticker):
     mult = round(floor + (1.0 - floor) * max(0.0, (frac - 0.5) / 0.5), 3)
     mult = min(1.0, max(floor, mult))
     return mult, {"agree_frac": round(frac, 2), "n": len(votes), "top": top}
+
+
+def horizon5d_multiplier(ticker):
+    # soft regime scaling per the verified table (hard conflicts are blocked
+    # in risk_gate before sizing): low-confidence 5d -> 0.75 (no tailwind),
+    # confident Neutral (rangebound) -> 0.6, aligned confident Up -> 1.0.
+    # maybe_enter only opens longs, so alignment is judged against BUY.
+    try:
+        from datetime import date, timedelta
+        h5_conf = float(os.environ.get("H5_MIN_CONFIDENCE", "0.5"))
+        cutoff = str(date.today() - timedelta(days=5))
+        rows = get_client().table("model_predictions") \
+            .select("direction,confidence,pred_date") \
+            .eq("ticker", ticker).eq("model", "cnn1d_5d") \
+            .gte("pred_date", cutoff) \
+            .order("pred_date", desc=True).limit(1).execute().data
+        if not rows:
+            return 1.0, None
+        h5 = rows[0]
+        conf = h5.get("confidence", 0)
+        info = {"direction": h5["direction"], "confidence": conf}
+        if conf < h5_conf:
+            return 0.75, info          # choppy/unclear regime — no tailwind
+        if h5["direction"] == "Neutral":
+            return 0.6, info           # confident rangebound — momentum suspect
+        if h5["direction"] == "Down":
+            return 0.5, info           # safety net (gate should have blocked)
+        return 1.0, info               # confident Up — aligned with a long
+    except Exception:
+        return 1.0, None
 
 
 def signal_risk_multiplier(ticker=None):
@@ -136,6 +218,9 @@ def signal_risk_multiplier(ticker=None):
         am, ainfo = agreement_multiplier(ticker)
         mult = round(mult * am, 3)
         detail["agreement"] = ainfo
+        hm, hinfo = horizon5d_multiplier(ticker)
+        mult = round(mult * hm, 3)
+        detail["horizon_5d"] = hinfo
     mult = min(1.0, max(DERISK_FLOOR, mult))
     detail["risk_multiplier"] = mult
     return mult, detail
@@ -160,4 +245,9 @@ def health_report():
     if cal["monotonic"] is False:
         print("  WARNING: accuracy does NOT rise with confidence — "
               "confidence may be uninformative")
-    return {"drift": d, "calibration": cal}
+    reg = regime_status()
+    print("signal health — market regime:")
+    if reg.get("neutral_share") is not None:
+        print(f"  {reg['regime']}: {reg['neutral_share']:.0%} of recent days "
+              f"Neutral — trade cap x{reg['cap_multiplier']}")
+    return {"drift": d, "calibration": cal, "regime": reg}
