@@ -38,12 +38,11 @@ APA,Energy
 APD,Materials
 APH,Information Technology
 APO,Financials
-APP,Information Technology
+APP,Communication Services
 APTV,Consumer Discretionary
 ARE,Real Estate
 ARES,Financials
 ATO,Utilities
-AVB,Real Estate
 AVGO,Information Technology
 AVY,Materials
 AWK,Utilities
@@ -128,7 +127,7 @@ CVX,Energy
 D,Utilities
 DAL,Industrials
 DASH,Consumer Discretionary
-DD,Materials
+DD,Industrials
 DDOG,Information Technology
 DE,Industrials
 DECK,Consumer Discretionary
@@ -150,7 +149,6 @@ DUK,Utilities
 DVA,Health Care
 DVN,Energy
 DXCM,Health Care
-EA,Communication Services
 EBAY,Consumer Discretionary
 ECHO,Communication Services
 ECL,Materials
@@ -164,7 +162,6 @@ EME,Industrials
 EMR,Industrials
 EOG,Energy
 EQIX,Real Estate
-EQR,Real Estate
 EQT,Energy
 ERIE,Financials
 ES,Utilities
@@ -186,6 +183,7 @@ FDS,Financials
 FDX,Industrials
 FDXF,Industrials
 FE,Utilities
+FERG,Industrials
 FFIV,Information Technology
 FICO,Information Technology
 FIS,Financials
@@ -386,6 +384,7 @@ PYPL,Financials
 Q,Information Technology
 QCOM,Information Technology
 RCL,Consumer Discretionary
+RDDT,Communication Services
 REG,Real Estate
 REGN,Health Care
 RF,Financials
@@ -469,6 +468,7 @@ VICI,Real Estate
 VLO,Energy
 VLTO,Industrials
 VMC,Materials
+VMRK,Real Estate
 VRSK,Industrials
 VRSN,Information Technology
 VRT,Industrials
