@@ -274,6 +274,38 @@ def ratchet_stops():
         fetch_bars=_daily_bars)
 
 
+def flatten_all():
+    # one-shot: cancel every open order, liquidate every open position, and
+    # reconcile the positions table. used once when starting a fresh strategy
+    # equity curve on the existing paper account. never called by the daily loop.
+    if not enabled():
+        return "paper trading disabled — set ALPACA keys and TRADING_MODE"
+    # cancelling all open orders first so alpaca allows the liquidations
+    try:
+        requests.delete(f"{base_url()}/orders", headers=_headers(),
+                        timeout=20).raise_for_status()
+        print("  [flatten] cancelled all open orders")
+    except Exception as e:
+        print(f"  [flatten] cancel-all failed, continuing: {e}")
+    # closing every position; DELETE /positions liquidates the whole book
+    positions = get_positions()
+    if not positions:
+        print("  [flatten] no open positions")
+    else:
+        try:
+            r = requests.delete(f"{base_url()}/positions?cancel_orders=true",
+                                headers=_headers(), timeout=30)
+            r.raise_for_status()
+            print(f"  [flatten] liquidated {len(positions)} positions: "
+                  f"{[p['symbol'] for p in positions]}")
+        except Exception as e:
+            print(f"  [flatten] liquidate-all failed: {e}")
+    # mirroring the now-empty book into the positions table
+    sync_positions_table()
+    print("  [flatten] positions table reconciled — book is flat")
+    return f"flattened {len(positions)} positions"
+
+
 def sync_positions_table():
     # mirroring live alpaca positions while preserving first-seen entry dates
     if not enabled():

@@ -6,7 +6,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", default="backtest",
-                        choices=["backtest", "election", "signal", "regime"])
+                        choices=["backtest", "election", "signal", "regime", "flatten"])
     parser.add_argument("--ticker", default="SPY")
     parser.add_argument("--limit", type=int, default=None,
                         help="cap the universe for a quick run")
@@ -28,6 +28,9 @@ def main():
     elif args.stage == "regime":
         from engine.strategies.regime import market_regime
         print(market_regime())
+    elif args.stage == "flatten":
+        from engine.execution import flatten_all
+        print(flatten_all())
 
 
 if __name__ == "__main__":

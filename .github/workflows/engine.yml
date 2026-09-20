@@ -16,7 +16,7 @@ on:
         required: true
         default: "daily"
         type: choice
-        options: [daily, score, weekly, manage]
+        options: [daily, score, weekly, manage, election, backtest, flatten]
 
 permissions:
   contents: read
@@ -34,16 +34,7 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: install cpu torch with retries and a pypi fallback
-        run: |
-          for i in 1 2 3; do
-            pip install torch --index-url https://download.pytorch.org/whl/cpu && break
-            echo "pytorch cpu index failed, retry $i in 30s"
-            sleep 30
-          done
-          python -c "import torch" 2>/dev/null || pip install torch
-
-      - name: install remaining dependencies
+      - name: install dependencies
         run: pip install -r requirements.txt transformers
 
       - name: resolve mode from trigger
@@ -93,4 +84,10 @@ jobs:
           EXPLORE_SLOTS: ${{ vars.EXPLORE_SLOTS }}
           STOCK_LENS_BASE: ${{ github.workspace }}/stock-lens-data
           PYTHONPATH: ${{ github.workspace }}/src
-        run: python -m engine.run_daily --mode "${{ steps.mode.outputs.mode }}"
+        run: |
+          case "${{ steps.mode.outputs.mode }}" in
+            election) python -m apps.main --stage election ;;
+            backtest) python -m apps.main --stage backtest ;;
+            flatten)  python -m apps.main --stage flatten ;;
+            *)        python -m engine.run_daily --mode "${{ steps.mode.outputs.mode }}" ;;
+          esac
