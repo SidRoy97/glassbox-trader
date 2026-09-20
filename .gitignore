@@ -12,3 +12,5 @@ logs/
 .env
 .env.*
 web/.env.local
+.DS_Store
+.codereach/
