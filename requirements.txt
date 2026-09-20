@@ -3,12 +3,9 @@ numpy
 matplotlib
 seaborn
 scikit-learn
-xgboost
 pandas_ta
 kaggle==1.6.17
-torch
 yfinance
-gradio
 anthropic
 fastapi
 uvicorn
