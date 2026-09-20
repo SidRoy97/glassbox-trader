@@ -14,10 +14,9 @@ CAP_OVERRIDE_CONFIDENCE = float(
 # favor?" risk = distance to the chandelier stop; reward = an ATR-multiple
 # target. trades whose upside does not justify their downside are rejected even
 # when judges are confident. env-tunable; set to 0 to disable.
-# the 5-day regime layer: a confident opposite 5d read blocks NEW entries
-# (open positions stay governed by the trade manager). env-tunable.
-HORIZON5D_GATE = os.environ.get("HORIZON5D_GATE", "1") == "1"
-H5_MIN_CONFIDENCE = float(os.environ.get("H5_MIN_CONFIDENCE", "0.5"))
+# the market regime gate: no NEW longs while the index is below its trend
+# average or volatility is stressed (open positions stay with the manager)
+from core.config import REGIME_GATE, MAX_OPEN_POSITIONS
 
 MIN_REWARD_RISK = float(os.environ.get("MIN_REWARD_RISK", "1.0"))
 TARGET_ATR_MULT = float(os.environ.get("TARGET_ATR_MULT", "3.0"))
@@ -25,11 +24,11 @@ TARGET_ATR_MULT = float(os.environ.get("TARGET_ATR_MULT", "3.0"))
 
 def _reward_risk(ticker, decision):
     # returns (rr_ratio, note) using the SAME atr + chandelier logic as
-    # pipeline.ta_structure, computed from recent daily bars. fails OPEN
+    # engine.ta_structure, computed from recent daily bars. fails OPEN
     # (returns None) if data is unavailable, so it never blocks on a fetch error.
     try:
         import pandas as pd
-        from pipeline.ta_structure import _atr, chandelier_exit
+        from engine.ta_structure import _atr, chandelier_exit
         try:
             from engine.yf_session import yf_download
             from core.config import EXCHANGE_SUFFIX
@@ -121,20 +120,15 @@ def count_trades_today():
     return sum(1 for r in (res.data or []) if r["action"] != "NO_TRADE")
 
 
-def _horizon5d_latest(ticker):
-    # the most recent 5d regime prediction within its 5-day validity window,
-    # read from model_predictions (written daily by shadow). fails open.
+def count_open_positions():
+    # counting names currently held, from the mirrored positions table
     try:
-        from datetime import date, timedelta
-        cutoff = str(date.today() - timedelta(days=5))
-        rows = get_client().table("model_predictions") \
-            .select("direction,confidence,pred_date") \
-            .eq("ticker", ticker).eq("model", "cnn1d_5d") \
-            .gte("pred_date", cutoff) \
-            .order("pred_date", desc=True).limit(1).execute().data
-        return rows[0] if rows else None
-    except Exception:
-        return None
+        rows = get_client().table("positions").select("ticker") \
+            .eq("status", "OPEN").execute().data or []
+        return len(rows)
+    except Exception as e:
+        print(f"[gate] open position count unavailable, assuming 0: {e}")
+        return 0
 
 
 def apply_gate(ticker, verdict):
@@ -158,21 +152,22 @@ def apply_gate(ticker, verdict):
             return "NO_TRADE", (f"gate: avg judge confidence {avg_conf:.2f} "
                                 f"below {MIN_JUDGE_CONFIDENCE}")
 
-    # blocking NEW entries that fight a confident 5-day regime read: don't
-    # buy into a confirmed downtrend or sell into a confirmed uptrend. the
-    # daily verdict NO_TRADE is never affected (the regime layer only filters
-    # trades, never creates them); open positions stay with the trade manager.
-    if decision != "NO_TRADE" and HORIZON5D_GATE:
-        h5 = _horizon5d_latest(ticker)
-        if h5 and h5.get("confidence", 0) >= H5_MIN_CONFIDENCE:
-            if decision == "BUY" and h5["direction"] == "Down":
-                return "NO_TRADE", (f"gate: 5d regime Down "
-                                    f"({h5['confidence']:.2f}) conflicts "
-                                    f"with BUY — abstaining")
-            if decision == "SELL" and h5["direction"] == "Up":
-                return "NO_TRADE", (f"gate: 5d regime Up "
-                                    f"({h5['confidence']:.2f}) conflicts "
-                                    f"with SELL — abstaining")
+    # blocking NEW longs in a risk-off market regime (index below trend or
+    # volatility stressed). sells are never blocked — exits reduce risk. the
+    # regime layer only filters trades, never creates them.
+    if decision == "BUY" and REGIME_GATE:
+        from engine.strategies.regime import market_regime
+        regime = market_regime()
+        if not regime.get("risk_on"):
+            return "NO_TRADE", (f"gate: risk-off regime — "
+                                f"{regime.get('reason', 'no data')}")
+
+    # blocking NEW longs once the book already holds the maximum names
+    if decision == "BUY":
+        held = count_open_positions()
+        if held >= MAX_OPEN_POSITIONS:
+            return "NO_TRADE", (f"gate: {held} positions open — cap is "
+                                f"{MAX_OPEN_POSITIONS}")
 
     # blocking trades whose reward does not justify the risk (asymmetry rule)
     if decision != "NO_TRADE" and MIN_REWARD_RISK > 0:

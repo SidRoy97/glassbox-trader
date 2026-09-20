@@ -1,6 +1,9 @@
 
 """running the morning decision loop, outcome scoring, and thesis review"""
 
+# signals come from engine/strategies (rule-based, book-derived); the news
+# layer vetoes or confirms, the llm debate can only veto, risk stays in code
+
 import os
 import argparse
 from datetime import datetime, timezone
@@ -10,10 +13,8 @@ from engine.protocol import decide
 from engine.risk_gate import apply_gate
 from engine.thesis import propose_thesis, review_theses
 from engine.lessons import distill_lessons
-from engine.champion import elect_champion, get_champion
+from engine.strategy_election import run_election, get_strategy_champion
 from engine.screener import select_watchlist
-from engine.shadow import (record_predictions,
-                           score_model_predictions, model_report)
 from engine.execution import (maybe_enter, maybe_exit,
                               sync_positions_table, paper_report, enabled,
                               is_trading_day, manage_positions,
@@ -93,11 +94,12 @@ def run_ticker(ticker, source="technical"):
     action, note = apply_gate(ticker, verdict)
     print(f"panel: {verdict['decision']} | gate: {action} | {note}")
 
-    sig = packet["cnn_signal"]
+    sig = packet["strategy_signal"]
     insert_decision(ticker, action, sig.get("direction", "unavailable"),
-                    sig.get("confidence", 0.0), verdict["bull_case"],
+                    sig.get("score", 0.0), verdict["bull_case"],
                     verdict["bear_case"], verdict["judge_votes"], note,
-                    selection_source=source)
+                    selection_source=source,
+                    strategy_name=sig.get("model"))
 
     # executing on paper only when the flag and keys are present
     if enabled():
@@ -223,7 +225,13 @@ def run_daily():
     if enabled():
         from engine.execution import trading_mode, base_url
         print(f"[exec] mode={trading_mode().upper()} endpoint={base_url()}")
-    upsert_market_context(market_summary())
+    from engine.strategies.regime import market_regime
+    regime = market_regime()
+    print(f"[regime] {'RISK-ON' if regime.get('risk_on') else 'RISK-OFF'}: "
+          f"{regime.get('reason')} | strategy: {get_strategy_champion()}")
+    upsert_market_context(f"{market_summary()}; regime "
+                          f"{'risk-on' if regime.get('risk_on') else 'risk-off'} "
+                          f"({regime.get('reason')})")
     from engine.news_fetcher import archive_macro_news
     archive_macro_news()
 
@@ -243,7 +251,6 @@ def run_daily():
         try:
             results[ticker] = run_ticker(
                 ticker, source=sources.get(ticker, "technical"))
-            record_predictions(ticker)
         except Exception as e:
             print(f"{ticker} failed: {e}")
             results[ticker] = "ERROR"
@@ -359,10 +366,10 @@ def score_outcomes():
 
 
 def performance_report(window=60):
-    # summarising panel accuracy and cnn drift over recent scored decisions
+    # summarising panel accuracy and strategy hit rate over scored decisions
     from engine.memory import get_client
     rows = get_client().table("decisions") \
-        .select("action,was_correct,cnn_direction,outcome_label") \
+        .select("action,was_correct,strategy_direction,outcome_label") \
         .not_.is_("scored_at", "null") \
         .order("decided_at", desc=True).limit(int(window)).execute().data or []
     if not rows:
@@ -370,15 +377,17 @@ def performance_report(window=60):
         return
     trades = [r for r in rows if r["action"] != "NO_TRADE"]
     holds = [r for r in rows if r["action"] == "NO_TRADE"]
-    cnn_hits = sum(1 for r in rows if r["cnn_direction"] == r["outcome_label"])
+    # a strategy BUY read is a hit when the next day closed Up
+    reads = [r for r in rows if r.get("strategy_direction") == "BUY"]
+    strat_hits = sum(1 for r in reads if r["outcome_label"] == "Up")
     print(f"performance (last {len(rows)} scored):")
     print(f"  trades correct : "
           f"{sum(1 for r in trades if r['was_correct'])}/{len(trades)}")
     print(f"  holds correct  : "
           f"{sum(1 for r in holds if r['was_correct'])}/{len(holds)} "
           f"(missed moves: {sum(1 for r in holds if not r['was_correct'])})")
-    print(f"  cnn hit rate   : {cnn_hits}/{len(rows)} "
-          f"(random baseline ~{len(rows)//3}) — retrain when this sags")
+    print(f"  strategy BUY hits: {strat_hits}/{len(reads)} "
+          f"(random baseline ~{len(reads)//3}) — election runs weekly")
 
 
 def write_weekly_report():
@@ -390,14 +399,15 @@ def write_weekly_report():
         .select("action,was_correct,scored_at") \
         .gte("decided_at", week_ago).execute().data or []
     scored = [d for d in dec if d["scored_at"]]
-    preds = get_client().table("model_predictions") \
-        .select("model,was_correct").not_.is_("scored_at", "null") \
-        .gte("pred_date", week_ago[:10]).execute().data or []
-    models = {}
-    for p in preds:
-        m = models.setdefault(p["model"], {"correct": 0, "scored": 0})
-        m["scored"] += 1
-        m["correct"] += 1 if p["was_correct"] else 0
+    # the latest strategy leaderboard replaces the old model tournament
+    bt = get_client().table("strategy_backtests") \
+        .select("run_date,strategy,utility,sharpe,cagr,max_drawdown,exposure") \
+        .order("run_date", desc=True).limit(20).execute().data or []
+    latest = bt[0]["run_date"] if bt else None
+    models = {b["strategy"]: {k: b[k] for k in
+                              ("utility", "sharpe", "cagr", "max_drawdown",
+                               "exposure")}
+              for b in bt if b["run_date"] == latest}
     lessons_new = get_client().table("lessons").select("lesson_text") \
         .gte("created_at", week_ago).execute().data or []
     ninety = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
@@ -410,7 +420,7 @@ def write_weekly_report():
     sell_rets = [h["outcome_return_1d"] for h in hist
                  if h["action"] == "SELL" and h["outcome_return_1d"] is not None]
     stats = {"decisions": len(dec),
-             "champion": get_champion(),
+             "champion": get_strategy_champion(),
              "avg_1d_after_buy": round(sum(buy_rets) / len(buy_rets), 4)
              if buy_rets else None,
              "avg_1d_after_sell": round(sum(sell_rets) / len(sell_rets), 4)
@@ -435,22 +445,21 @@ def write_weekly_report():
 def weekly_review():
     # scoring outcomes, reporting performance, reviewing recent tickers
     score_outcomes()
-    score_model_predictions()
     performance_report()
-    model_report()
     paper_report()
     distill_lessons()
-    elect_champion()
-    # signal-1 health: drift (is the champion decaying toward random?) and
-    # calibration (does stated confidence mean accuracy?). read-only alerting;
-    # the auto-derisk it drives happens in execution at entry time.
+    # electing next week's strategy from a fresh ritter-utility backtest
+    try:
+        run_election()
+    except Exception as e:
+        print(f"strategy election failed: {e}")
+    # signal health: is the elected strategy's live hit rate decaying toward
+    # random? read-only alerting; the auto-derisk happens at entry time.
     try:
         from engine.signal_health import health_report
         health_report()
     except Exception as e:
         print(f"signal health report failed: {e}")
-    from engine.retrain_trigger import maybe_trigger_retrain
-    maybe_trigger_retrain()
     try:
         from engine.evidence_report import evidence_report
         evidence_report()
@@ -482,7 +491,6 @@ def main():
         run_manage()
     elif args.mode == "score":
         score_outcomes()
-        score_model_predictions()
     else:
         weekly_review()
 

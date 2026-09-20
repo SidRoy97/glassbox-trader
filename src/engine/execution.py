@@ -6,6 +6,7 @@ import requests
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from engine.memory import get_client, validate_ticker
+from core.config import MAX_OPEN_POSITIONS
 
 load_dotenv()
 
@@ -111,9 +112,14 @@ def maybe_enter(ticker):
     if in_drawdown_halt():
         return f"{ticker}: drawdown halt active — no new entries"
 
-    # skipping when a position already exists for this symbol
-    if any(p["symbol"] == ticker.replace(".", "-") for p in get_positions()):
+    # skipping when a position already exists for this symbol, and refusing
+    # a new one once the book holds the maximum number of names
+    open_positions = get_positions()
+    if any(p["symbol"] == ticker.replace(".", "-") for p in open_positions):
         return f"{ticker}: position already open"
+    if len(open_positions) >= MAX_OPEN_POSITIONS:
+        return (f"{ticker}: {len(open_positions)} positions open — "
+                f"cap is {MAX_OPEN_POSITIONS}, no new entry")
 
     # refusing new entries right before a binary earnings event
     try:
@@ -133,9 +139,9 @@ def maybe_enter(ticker):
 
     equity = float(get_account()["equity"])
     risk_dollars = equity * RISK_PER_TRADE
-    # performance-based risk scaling: when signal-1 (the model layer) is drifting
-    # toward random or the models disagree on this ticker, shrink risk. never
-    # amplifies (multiplier <= 1.0); toggle with SIGNAL_DERISK=0 to A/B test.
+    # performance-based risk scaling: when the elected strategy's live hit
+    # rate is drifting toward random, shrink risk. never amplifies
+    # (multiplier <= 1.0); toggle with SIGNAL_DERISK=0 to A/B test.
     if os.environ.get("SIGNAL_DERISK", "1") == "1":
         try:
             from engine.signal_health import signal_risk_multiplier

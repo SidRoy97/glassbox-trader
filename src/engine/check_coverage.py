@@ -74,18 +74,19 @@ def main():
     for prov, cnt in provider_totals.most_common():
         print(f"  {prov:16s} {cnt}")
 
-    # also check model_predictions coverage (the shadow tournament)
+    # also report the latest strategy leaderboard (replaces the tournament)
     try:
-        preds = client.table("model_predictions").select("model") \
-            .eq("pred_date", today).execute().data or []
-        pc = Counter(p["model"] for p in preds)
-        print(f"\nmodel_predictions logged today: {len(preds)} rows across "
-              f"{len(pc)} models")
-        for m, c in pc.most_common():
-            print(f"  {m:16s} {c}")
+        bt = client.table("strategy_backtests") \
+            .select("run_date,strategy,utility,sharpe") \
+            .order("run_date", desc=True).limit(10).execute().data or []
+        latest = bt[0]["run_date"] if bt else None
+        print(f"\nstrategy backtests (run {latest}):")
+        for b in bt:
+            if b["run_date"] == latest:
+                print(f"  {b['strategy']:20s} utility {b['utility']:+.3f} "
+                      f"sharpe {b['sharpe']:+.2f}")
     except Exception as e:
-        print(f"(model_predictions check skipped: {e})")
-
+        print(f"(strategy_backtests check skipped: {e})")
 
 if __name__ == "__main__":
     main()

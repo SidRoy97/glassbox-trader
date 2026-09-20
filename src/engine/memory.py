@@ -36,16 +36,21 @@ def validate_ticker(ticker):
     return ticker
 
 
-def insert_decision(ticker, action, cnn_direction, cnn_confidence,
+def insert_decision(ticker, action, strategy_direction, strategy_score,
                     bull_case, bear_case, judge_votes, risk_gate_note,
-                    selection_source=None):
-    # recording one decision with its full debate transcript
+                    selection_source=None, strategy_name=None):
+    # recording one decision with its full debate transcript; the legacy
+    # cnn_* columns mirror the strategy read so the site keeps working
+    # until its own change pack lands
     ticker = validate_ticker(ticker)
     if action not in VALID_ACTIONS:
         raise ValueError(f"invalid action: {action!r}")
     row = {"ticker": ticker, "action": action,
-           "cnn_direction": str(cnn_direction)[:16],
-           "cnn_confidence": float(cnn_confidence),
+           "strategy_name": str(strategy_name or "")[:40] or None,
+           "strategy_direction": str(strategy_direction)[:16],
+           "strategy_score": float(strategy_score),
+           "cnn_direction": str(strategy_direction)[:16],
+           "cnn_confidence": float(strategy_score),
            "bull_case": bull_case, "bear_case": bear_case,
            "judge_votes": judge_votes,
            "risk_gate_note": str(risk_gate_note)[:500]}
@@ -88,7 +93,8 @@ def get_recent_decisions(ticker, limit=5, days=30):
     ticker = validate_ticker(ticker)
     cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
     res = get_client().table("decisions").select(
-        "decided_at,action,cnn_direction,outcome_label,was_correct") \
+        "decided_at,action,strategy_name,strategy_direction,outcome_label,"
+        "was_correct") \
         .eq("ticker", ticker).gte("decided_at", cutoff) \
         .order("decided_at", desc=True).limit(int(limit)).execute()
     return res.data or []

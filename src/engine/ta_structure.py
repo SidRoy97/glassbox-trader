@@ -1,7 +1,7 @@
 """Structure-based technical features for glassbox-trader.
 
-Lives at src/pipeline/ta_structure.py, imported as
-`from pipeline.ta_structure import build_structure_features`.
+Lives at src/engine/ta_structure.py, imported as
+`from engine.ta_structure import technical_structure_block`.
 
 Implementing the mechanically computable concepts distilled from the
 strategy videos: EMA regime and pullback state, fair value gaps and
@@ -10,11 +10,9 @@ ADX trend strength, candle anatomy, and chandelier trailing levels.
 Every function is causal: row i only uses information available at bar i,
 matching the leak-safe discipline of the rest of the pipeline.
 
-Two consumers:
-  1. build_structure_features(df) -> 22 feature columns for the model
-     roster (gate through retrain challengers, never hot-swap).
-  2. technical_structure_block(df) -> compact citable dict for the
-     evidence packet in engine/data_packet.py.
+Consumers: technical_structure_block(df) for the evidence packet in
+engine/data_packet.py, and chandelier_exit / _atr for risk_gate and the
+stop ratchet. build_structure_features(df) is kept for research use.
 """
 
 import numpy as np

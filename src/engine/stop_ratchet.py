@@ -11,7 +11,7 @@ and the pipeline's bar fetcher, and stays unit-testable without a broker.
 
 import logging
 
-from pipeline.ta_structure import chandelier_exit
+from engine.ta_structure import chandelier_exit
 
 log = logging.getLogger(__name__)
 

@@ -50,6 +50,8 @@ BLOCK_MAP = {
     "congress_trading": "congress_trading",
     "insider_activity": "insider_activity",
     "cnn_signal": "model_signal",
+    "strategy_signal": "model_signal",
+    "market_regime": "market_context",
     "earnings": "earnings",
     "overnight_gap": "overnight_gap",
     "track_record": "track_record",

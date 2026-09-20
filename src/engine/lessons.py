@@ -12,7 +12,7 @@ LESSON_SCHEMA = ["lessons"]
 def _wrong_cases(limit=40):
     # collecting recent scored mistakes with their reasoning and context
     rows = get_client().table("decisions") \
-        .select("id,ticker,decided_at,action,cnn_direction,cnn_confidence,"
+        .select("id,ticker,decided_at,action,strategy_name,strategy_direction,strategy_score,"
                 "judge_votes,outcome_label,outcome_return_1d") \
         .eq("was_correct", False).not_.is_("scored_at", "null") \
         .order("decided_at", desc=True).limit(int(limit)).execute().data or []
@@ -27,8 +27,9 @@ def _wrong_cases(limit=40):
         cases.append({"id": r["id"], "ticker": r["ticker"],
                       "date": str(r["decided_at"])[:10],
                       "called": r["action"],
-                      "cnn": f"{r['cnn_direction']} "
-                             f"{r['cnn_confidence']:.2f}",
+                      "strategy": f"{r.get('strategy_name') or '?'} "
+                                  f"{r.get('strategy_direction') or '?'} "
+                                  f"{float(r.get('strategy_score') or 0):.2f}",
                       "judge_reason": reason,
                       "actual": f"{r['outcome_label']} "
                                 f"{(r['outcome_return_1d'] or 0) * 100:+.1f}%",

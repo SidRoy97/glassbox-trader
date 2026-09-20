@@ -1,5 +1,8 @@
 """assembling the grounded data packet every panel argues over"""
 
+# signal source: engine/strategies (rule-based) elected by ritter-utility
+# backtests in engine/strategy_election; no trained classifier is consulted
+
 import json
 from engine.memory import (get_recent_news, get_recent_decisions,
                            get_active_lessons, get_active_thesis,
@@ -7,92 +10,49 @@ from engine.memory import (get_recent_news, get_recent_decisions,
                            get_open_position, get_ticker_stats)
 
 
-def _rf_signal(df):
-    # producing the packet signal from the random forest on the latest row
-    import numpy as np
-    from inference.predictors import load_rf_predictor
-    rf = load_rf_predictor()
-    if rf is None:
-        return None
-    frame = df.copy()
-    for c in rf["feature_cols"]:
-        if c not in frame.columns:
-            frame[c] = np.nan
-    latest = frame.iloc[[-1]][rf["feature_cols"]]
-    x = rf["scaler"].transform(rf["imputer"].transform(latest))
-    p = rf["model"].predict_proba(x)[0]
-    idx = int(p.argmax())
-    row = df.iloc[-1]
-    return {"model": "random_forest",
-            "direction": str(rf["label_encoder"].classes_[idx]),
-            "confidence": round(float(p[idx]), 4),
-            "close": round(float(row["close"]), 2),
-            "rsi": round(float(row["rsi"]), 1),
-            "return_5d": round(float(row["return_5d"]), 4),
-            "return_10d": round(float(row["return_10d"]), 4),
-            "pct_vs_ma50": round(float(row["close"] / row["ma50"] - 1), 4),
-            "vol_ratio": round(float(row["vol_ratio"]), 2),
-            "rel_to_sector": round(float(row["rel_to_sector"]), 4)}
+def _indicator_block(df):
+    # the plain price facts judges used to read off the model signal
+    from engine.strategies.common import rsi
+    close = df["close"]
+    vol = df["volume"] if "volume" in df.columns else None
+    ma50 = float(close.rolling(50).mean().iloc[-1])
+    return {"close": round(float(close.iloc[-1]), 2),
+            "rsi": round(float(rsi(close).iloc[-1]), 1),
+            "return_5d": round(float(close.iloc[-1] / close.iloc[-6] - 1), 4),
+            "return_10d": round(float(close.iloc[-1] / close.iloc[-11] - 1), 4),
+            "pct_vs_ma50": round(float(close.iloc[-1] / ma50 - 1), 4),
+            "vol_ratio": round(float(vol.iloc[-1] / vol.rolling(20).mean()
+                                     .iloc[-1]), 2) if vol is not None else None}
 
 
-def get_cnn_signal(ticker):
-    # stamping which model actually holds the title into the signal block
-    from engine.champion import get_champion
-    champion = "cnn1d"
-    try:
-        champion = get_champion()
-    except Exception:
-        pass
-    sig = _champion_signal(ticker)
-    if isinstance(sig, dict):
-        sig["model"] = champion
+def get_strategy_signal(ticker, news_items=None):
+    # reading the elected rule strategy on live bars, showing every
+    # strategy's vote alongside it and the market regime that gates them all
+    from core.config import STRATEGY_CASH, BARS_LOOKBACK_DAYS
+    from engine.market_data import bars_for
+    from engine.strategies import get_strategy, all_signals
+    from engine.strategies.regime import market_regime
+    from engine.strategies import news_gate
+    from engine.strategy_election import get_strategy_champion
+    champion = get_strategy_champion()
+    df = bars_for(ticker, days=BARS_LOOKBACK_DAYS)
+    if df is None or len(df) < 60:
+        return {"model": champion, "direction": "unavailable", "score": 0.0,
+                "reason": "no bars"}
+    regime = market_regime()
+    if champion == STRATEGY_CASH:
+        sig = {"model": champion, "direction": "NO_TRADE", "score": 0.0,
+               "reason": "no strategy earned positive utility in the last "
+                         "election — sitting in cash"}
+    else:
+        sig = get_strategy(champion).signal(df)
+    sig = news_gate.apply(sig, news_items or [])
+    if not regime.get("risk_on") and sig["direction"] == "BUY":
+        sig["regime_note"] = "risk-off regime — the gate will block BUYs"
+    sig.update(_indicator_block(df))
+    sig["all_strategies"] = all_signals(df)
+    sig["market_regime"] = regime
     return sig
-
-
-def _champion_signal(ticker):
-    # producing the packet signal from whichever model holds the title
-    import numpy as np
-    import torch
-    from inference.predictors import load_seq_predictor
-    from inference.live_features import build_live_frame, fill_missing_features
-    from engine.champion import get_champion
-    champion = "cnn1d"
-    try:
-        champion = get_champion()
-    except Exception:
-        pass
-    seq = load_seq_predictor()
-    if seq is None:
-        return {"direction": "unavailable", "confidence": 0.0}
-    df = build_live_frame(ticker)
-    if df is None or df.empty:
-        return {"direction": "unavailable", "confidence": 0.0}
-    if champion == "random_forest":
-        sig = _rf_signal(df)
-        if sig is not None:
-            return sig
-    meta = seq["meta"]
-    df = fill_missing_features(df, meta["feature_cols"], seq["scaler"])
-    if len(df) < meta["window"]:
-        return {"direction": "unavailable", "confidence": 0.0}
-    win = df.iloc[-meta["window"]:][meta["feature_cols"]] \
-        .values.astype("float32")
-    win = seq["scaler"].transform(win)
-    with torch.no_grad():
-        out = seq["model"](torch.tensor(win).unsqueeze(0)).numpy().squeeze()
-    probs = np.exp(out) / np.exp(out).sum()
-    idx = int(probs.argmax())
-    latest = df.iloc[-1]
-    return {"model": meta.get("kind", "cnn1d"),
-            "direction": meta["classes"][idx],
-            "confidence": round(float(probs[idx]), 4),
-            "close": round(float(latest["close"]), 2),
-            "rsi": round(float(latest["rsi"]), 1),
-            "return_5d": round(float(latest["return_5d"]), 4),
-            "return_10d": round(float(latest["return_10d"]), 4),
-            "pct_vs_ma50": round(float(latest["close"] / latest["ma50"] - 1), 4),
-            "vol_ratio": round(float(latest["vol_ratio"]), 2),
-            "rel_to_sector": round(float(latest["rel_to_sector"]), 4)}
 
 
 def _structure_block(ticker):
@@ -100,7 +60,7 @@ def _structure_block(ticker):
     try:
         import pandas as pd
         import yfinance as yf
-        from pipeline.ta_structure import technical_structure_block
+        from engine.ta_structure import technical_structure_block
         hist = yf.download(ticker.replace(".", "-"), period="1y",
                            auto_adjust=True, progress=False)
         if hist is None or hist.empty or len(hist) < 60:
@@ -283,8 +243,8 @@ def build_packet(ticker, news_items):
                   "sentiment": n.get("sentiment")} for n in news_items[:5]],
         "news_sentiment_avg": round(sum(sentiments) / len(sentiments), 3)
         if sentiments else None,
-        # one c-grade opinion among many, deliberately not the headline
-        "cnn_signal": get_cnn_signal(ticker),
+        # the elected rule strategy, with every strategy's vote shown
+        "strategy_signal": get_strategy_signal(ticker, news_items),
         "value_area": _value_area_block(ticker),
         "recent_decisions": get_recent_decisions(ticker, limit=5),
         "lessons": get_active_lessons(limit=8),
