@@ -4,7 +4,8 @@ from datetime import date, timedelta
 from core.config import (STRATEGY_DEFAULT, STRATEGY_CASH, BT_LOOKBACK_MONTHS,
                          BT_MIN_EXPOSURE, BARS_LOOKBACK_DAYS, REGIME_INDEX,
                          REGIME_VOL_INDEX, REGIME_GATE, BT_WALK_FORWARD,
-                         FALLBACK_MAX_DRAWDOWN, STRATEGY_BLEND_K)
+                         FALLBACK_MAX_DRAWDOWN, STRATEGY_BLEND_K,
+                         BENCHMARK_TICKER, BENCHMARK_NAME, BT_ANNUAL_DAYS)
 from engine.memory import get_client
 
 CONFIG_KEY = "strategy_champion"
@@ -68,11 +69,45 @@ def backtest_all(bars=None, limit=None, window_months=BT_LOOKBACK_MONTHS):
         if BT_WALK_FORWARD:
             row.update(walk_forward_score(res["net_returns"]))
         rows.append(row)
+    # add SPY buy-and-hold as a non-tradeable benchmark yardstick
+    bench = _benchmark_row(bars, start)
+    if bench is not None:
+        rows.append(bench)
     # rank on the robust metric when walk-forward is on: a strategy must hold
     # up in its weakest window, not just on average over the trailing year
     key = "worst_fold_utility" if BT_WALK_FORWARD else "utility"
     rows.sort(key=lambda r: r.get(key, r["utility"]), reverse=True)
     return rows
+
+
+def _benchmark_row(bars, start):
+    # scoring SPY buy-and-hold on the same window and metrics as the strategies,
+    # so the leaderboard shows whether any strategy beats simply holding the
+    # index. never elected — it is a yardstick, flagged benchmark=True.
+    import numpy as np
+    from engine.backtest import walk_forward_score, _utility_of
+    b = bars.get(BENCHMARK_TICKER)
+    if b is None:
+        return None
+    net = b["close"].pct_change().fillna(0.0)
+    net = net[net.index >= str(start)]
+    if net.empty:
+        return None
+    equity = (1 + net).cumprod()
+    dd = float((equity / equity.cummax() - 1).min())
+    std = float(net.std())
+    row = {"strategy": BENCHMARK_NAME, "benchmark": True,
+           "utility": round(_utility_of(net), 4),
+           "sharpe": round(float(net.mean() / std * np.sqrt(BT_ANNUAL_DAYS)), 3)
+           if std > 0 else 0.0,
+           "cagr": round(float(equity.iloc[-1]) **
+                         (1 / max(len(net) / BT_ANNUAL_DAYS, 1e-9)) - 1, 4),
+           "max_drawdown": round(dd, 4), "hit_rate": 0.0,
+           "exposure": 1.0, "avg_turnover": 0.0, "n_days": int(len(net)),
+           "universe_size": 1}
+    if BT_WALK_FORWARD:
+        row.update(walk_forward_score(net))
+    return row
 
 
 def save_backtests(rows):
@@ -97,7 +132,9 @@ def elect(rows):
     #     only if its drawdown is tolerable — a defensive trade beats sitting
     #     out when the safest option is genuinely safe
     #  3. otherwise cash: even the calmest strategy is too risky right now
-    invested = [r for r in rows if r["exposure"] >= BT_MIN_EXPOSURE]
+    # the benchmark is a yardstick, never a tradeable champion
+    tradeable = [r for r in rows if not r.get("benchmark")]
+    invested = [r for r in tradeable if r["exposure"] >= BT_MIN_EXPOSURE]
     positive = [r for r in invested if _robust_utility(r) > 0]
     if positive:
         positive.sort(key=_robust_utility, reverse=True)
@@ -132,6 +169,17 @@ def run_election(limit=None):
         save_backtests(rows)
     except Exception as e:
         print(f"[election] could not save backtests: {e}")
+    # honest check: did any tradeable strategy beat SPY buy-and-hold?
+    bench = next((r for r in rows if r.get("benchmark")), None)
+    if bench is not None:
+        key = "worst_fold_utility" if BT_WALK_FORWARD else "utility"
+        best = max((r for r in rows if not r.get("benchmark")),
+                   key=lambda r: r.get(key, r["utility"]), default=None)
+        if best is not None and best.get(key, best["utility"]) \
+                <= bench.get(key, bench["utility"]):
+            print(f"[election] NOTE: no strategy beats {BENCHMARK_NAME} on "
+                  f"{key} ({bench.get(key, bench['utility']):+.3f}) — holding "
+                  f"the index would have been the risk-adjusted choice")
     winner = elect(rows)
     current = get_strategy_champion()
     if winner != current:

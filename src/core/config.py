@@ -66,6 +66,19 @@ LOWVOL_WINDOW = 60
 LOWVOL_MAX_ANN_VOL = _envfloat("LOWVOL_MAX_ANN_VOL", 0.30)
 LOWVOL_TREND_MA = 100
 
+# trend_follow_ma: ml4t moving-average crossover — hold while the fast average
+# is above the slow one, a classic trend-following filter that sits out
+# downtrends entirely (very defensive)
+TREND_FAST_MA = 50
+TREND_SLOW_MA = 200
+TREND_FULL_SCORE_GAP = 0.10   # fast 10% above slow maps to score 1.0
+
+# dual_momentum: gary antonacci's absolute + relative momentum — only hold a
+# name when its own 12-1 return is positive (absolute) AND it beats the market
+# index over the same window (relative). rotates to cash-like safety otherwise
+DUALMOM_LOOKBACK = 252
+DUALMOM_SKIP = 21
+
 # shared long-term trend filter used by every strategy
 TREND_MA = 200
 
@@ -91,7 +104,7 @@ BT_RISK_AVERSION_KAPPA = _envfloat("BT_RISK_AVERSION_KAPPA", 4.0)
 # ritter eq 17-18 folded into basis points per unit of turnover
 BT_SPREAD_BPS = 5.0
 BT_IMPACT_BPS = 5.0
-BT_LOOKBACK_MONTHS = _envint("BT_LOOKBACK_MONTHS", 12)
+BT_LOOKBACK_MONTHS = _envint("BT_LOOKBACK_MONTHS", 36)
 BT_MIN_EXPOSURE = 0.10        # a strategy that is almost never invested cannot win
 BT_ANNUAL_DAYS = 252
 
@@ -114,6 +127,13 @@ FALLBACK_MAX_DRAWDOWN = _envfloat("FALLBACK_MAX_DRAWDOWN", 0.15)
 # winner-take-all, to diversify across premia and cut single-strategy variance.
 # 1 restores winner-take-all. the champion string becomes "a+b" when K>1.
 STRATEGY_BLEND_K = _envint("STRATEGY_BLEND_K", 2)
+
+# benchmark: score SPY buy-and-hold on the leaderboard so every strategy is
+# judged against just holding the index. if nothing beats it on risk-adjusted
+# utility, the honest answer is to hold SPY — the benchmark makes that visible.
+# it is a yardstick only and is never elected as a tradeable champion.
+BENCHMARK_TICKER = "SPY"
+BENCHMARK_NAME = "SPY_buy_hold"
 
 # ---- portfolio limits shared by backtest and execution --------------------
 MAX_OPEN_POSITIONS = _envint("MAX_OPEN_POSITIONS", 5)

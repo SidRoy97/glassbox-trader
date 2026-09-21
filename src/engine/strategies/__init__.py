@@ -1,11 +1,14 @@
 """registering every rule strategy so screener, packet, and backtest agree"""
 
-from engine.strategies import momentum, mean_reversion, low_vol
+from engine.strategies import (momentum, mean_reversion, low_vol,
+                               trend_follow, dual_momentum)
 
 # order matters only for display; election ranks on backtest utility
 REGISTRY = {momentum.NAME: momentum,
             mean_reversion.NAME: mean_reversion,
-            low_vol.NAME: low_vol}
+            low_vol.NAME: low_vol,
+            trend_follow.NAME: trend_follow,
+            dual_momentum.NAME: dual_momentum}
 
 
 def get_strategy(name):
