@@ -112,10 +112,22 @@ def _benchmark_row(bars, start):
     return row
 
 
+# the columns strategy_backtests actually has; anything else a row carries
+# (transient election fields, future metrics) is dropped before the upsert so
+# a new field never breaks the leaderboard save again
+BACKTEST_COLUMNS = ("strategy", "utility", "sharpe", "cagr", "max_drawdown",
+                    "hit_rate", "exposure", "avg_turnover", "n_days",
+                    "universe_size", "worst_fold_utility", "mean_fold_utility",
+                    "fold_spread", "n_folds", "benchmark", "live_n",
+                    "live_hit_rate", "live_penalty")
+
+
 def save_backtests(rows):
     # storing the leaderboard for the site and the weekly report
     today = str(date.today())
-    payload = [{"run_date": today, **r} for r in rows]
+    payload = [{"run_date": today,
+                **{k: r[k] for k in BACKTEST_COLUMNS if k in r}}
+               for r in rows]
     if payload:
         get_client().table("strategy_backtests").upsert(payload).execute()
 
