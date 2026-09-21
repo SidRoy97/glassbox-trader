@@ -35,6 +35,29 @@ def _recent_scored(window=DRIFT_WINDOW):
     return rows
 
 
+def live_hit_rates(window=DRIFT_WINDOW):
+    # real-account hit rate per strategy from scored BUY reads; a blended
+    # champion "a+b" credits each member, since both voted for the read
+    rates = {}
+    try:
+        rows = [r for r in _recent_scored(window)
+                if r.get("strategy_direction") == "BUY"
+                and r.get("strategy_name")]
+    except Exception as e:
+        print(f"[signal_health] live hit rates unavailable: {e}")
+        return rates
+    tallies = {}
+    for r in rows:
+        for member in str(r["strategy_name"]).split("+"):
+            t = tallies.setdefault(member, {"n": 0, "hits": 0})
+            t["n"] += 1
+            t["hits"] += 1 if r.get("outcome_label") == "Up" else 0
+    for name, t in tallies.items():
+        rates[name] = {"n": t["n"],
+                       "hit_rate": round(t["hits"] / t["n"], 4) if t["n"] else None}
+    return rates
+
+
 def drift_status():
     # is the elected strategy's recent BUY hit rate healthily above random?
     champ = _champion()

@@ -5,7 +5,9 @@ from core.config import (STRATEGY_DEFAULT, STRATEGY_CASH, BT_LOOKBACK_MONTHS,
                          BT_MIN_EXPOSURE, BARS_LOOKBACK_DAYS, REGIME_INDEX,
                          REGIME_VOL_INDEX, REGIME_GATE, BT_WALK_FORWARD,
                          FALLBACK_MAX_DRAWDOWN, STRATEGY_BLEND_K,
-                         BENCHMARK_TICKER, BENCHMARK_NAME, BT_ANNUAL_DAYS)
+                         BENCHMARK_TICKER, BENCHMARK_NAME, BT_ANNUAL_DAYS,
+                         LIVE_FEEDBACK, LIVE_FEEDBACK_MIN_N,
+                         LIVE_FEEDBACK_WEIGHT, LIVE_HIT_TARGET)
 from engine.memory import get_client
 
 CONFIG_KEY = "strategy_champion"
@@ -120,9 +122,35 @@ def save_backtests(rows):
 
 def _robust_utility(row):
     # the metric we elect on: worst out-of-sample fold when walk-forward is on,
-    # otherwise the trailing-window utility
-    return row.get("worst_fold_utility", row["utility"]) \
+    # otherwise the trailing-window utility, minus any live-outcome penalty
+    base = row.get("worst_fold_utility", row["utility"]) \
         if BT_WALK_FORWARD else row["utility"]
+    return base - row.get("live_penalty", 0.0)
+
+
+def apply_live_feedback(rows):
+    # the self-improvement loop grounded in the real account: a strategy whose
+    # live hit rate falls short of the healthy target is penalised in
+    # proportion, once it has enough scored reads to judge. this never rewards
+    # a strategy (penalty >= 0) — it can only demote rules that stopped working
+    if not LIVE_FEEDBACK:
+        return rows
+    from engine.signal_health import live_hit_rates
+    live = live_hit_rates()
+    for r in rows:
+        stat = live.get(r["strategy"])
+        r["live_n"] = stat["n"] if stat else 0
+        r["live_hit_rate"] = stat["hit_rate"] if stat else None
+        r["live_penalty"] = 0.0
+        if stat and stat["n"] >= LIVE_FEEDBACK_MIN_N \
+                and stat["hit_rate"] is not None:
+            shortfall = max(0.0, LIVE_HIT_TARGET - stat["hit_rate"])
+            r["live_penalty"] = round(LIVE_FEEDBACK_WEIGHT * shortfall, 4)
+            if r["live_penalty"] > 0:
+                print(f"[election] {r['strategy']}: live hit "
+                      f"{stat['hit_rate']:.0%} on {stat['n']} reads vs target "
+                      f"{LIVE_HIT_TARGET:.0%} — penalty {r['live_penalty']:.3f}")
+    return rows
 
 
 def elect(rows):
@@ -140,9 +168,14 @@ def elect(rows):
         positive.sort(key=_robust_utility, reverse=True)
         winners = positive[:max(1, STRATEGY_BLEND_K)]
         return "+".join(w["strategy"] for w in winners)
-    # fallback: the least-risky invested strategy, if its drawdown is bearable
-    if invested:
-        safest = min(invested, key=lambda r: abs(r["max_drawdown"]))
+    # fallback: the least-risky invested strategy, if its drawdown is bearable.
+    # strategies with a live-outcome penalty are skipped first — a rule that is
+    # failing in the real account is not a safe harbour, however calm its
+    # backtest looks — and only if none are clean do penalised ones qualify
+    clean = [r for r in invested if not r.get("live_penalty")]
+    pool = clean or invested
+    if pool:
+        safest = min(pool, key=lambda r: abs(r["max_drawdown"]))
         if abs(safest["max_drawdown"]) <= FALLBACK_MAX_DRAWDOWN:
             print(f"[election] no strategy robustly positive; falling back to "
                   f"least-risky {safest['strategy']} "
@@ -157,6 +190,9 @@ def elect(rows):
 def run_election(limit=None):
     # weekly entry point: backtest, store, elect, report
     rows = backtest_all(limit=limit)
+    rows = apply_live_feedback(rows)
+    rows.sort(key=lambda r: (not r.get("benchmark"), _robust_utility(r)
+                             if not r.get("benchmark") else -1e9), reverse=True)
     for r in rows:
         wf = (f"  worst-fold {r['worst_fold_utility']:+.3f}  "
               f"spread {r.get('fold_spread', 0):.3f}"

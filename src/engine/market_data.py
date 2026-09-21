@@ -36,7 +36,8 @@ def _normalise(frame):
     if frame is None or frame.empty:
         return None
     if isinstance(frame.columns, pd.MultiIndex):
-        frame.columns = frame.columns.get_level_values(0)
+        # keep the field level (open/close/...), never the ticker level
+        frame.columns = frame.columns.get_level_values(-1)
     frame = frame.rename(columns=str.lower)
     if "close" not in frame.columns:
         return None
@@ -56,15 +57,23 @@ def download_bars(tickers, days=BARS_LOOKBACK_DAYS):
                       group_by="ticker", auto_adjust=True, progress=False,
                       threads=True)
     out = {}
-    single = len(symbols) == 1
     for ticker, sym in symbols.items():
+        # yfinance returns (ticker, field) columns even for one symbol when
+        # group_by="ticker", so always select the ticker level when present
         try:
-            frame = raw if single else raw[sym]
+            if isinstance(raw.columns, pd.MultiIndex) \
+                    and sym in raw.columns.get_level_values(0):
+                frame = raw[sym]
+            else:
+                frame = raw
         except KeyError:
             print(f"[market_data] {ticker}: not in download")
             continue
         norm = _normalise(frame.copy())
         if norm is not None and not norm.empty:
+            # tagging the frame so ticker-aware strategies (index basket) can
+            # tell an etf from a single name without a signature change
+            norm.attrs["ticker"] = ticker
             out[ticker] = norm
     print(f"[market_data] downloaded {len(out)}/{len(tickers)} tickers "
           f"({days}d)")

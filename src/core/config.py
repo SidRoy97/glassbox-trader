@@ -37,8 +37,10 @@ ETF_UNIVERSE = ["SPY", "QQQ", "IWM", "DIA", "VTI", "VOO",
                 "XLB", "XLRE", "XLC",
                 "VEA", "VWO", "AGG", "TLT", "GLD"]
 ETF_SECTOR = "ETF"
-# enough daily bars for a 252-day momentum window plus indicator warmup
-BARS_LOOKBACK_DAYS = _envint("BARS_LOOKBACK_DAYS", 420)
+# enough daily bars for the backtest window PLUS a 252-day indicator warmup:
+# 36 months (~760 trading days) + 252 warmup + margin. the daily loop reads
+# only the tail it needs, so the extra history costs one download, not speed
+BARS_LOOKBACK_DAYS = _envint("BARS_LOOKBACK_DAYS", 1150)
 # minimum bars a ticker needs before any strategy will read it
 STRATEGY_MIN_DAYS = 260
 
@@ -78,6 +80,12 @@ TREND_FULL_SCORE_GAP = 0.10   # fast 10% above slow maps to score 1.0
 # index over the same window (relative). rotates to cash-like safety otherwise
 DUALMOM_LOOKBACK = 252
 DUALMOM_SKIP = 21
+
+# index_regime: hold a broad, diversified etf basket while each etf is above
+# its long trend, and step to cash otherwise. this is what the SPY benchmark
+# pointed at: capture index return while sidestepping its deep drawdowns.
+# gold (GLD) sits in the basket as a low-correlation diversifier.
+INDEX_BASKET = ["SPY", "QQQ", "VTI", "DIA", "GLD"]
 
 # shared long-term trend filter used by every strategy
 TREND_MA = 200
@@ -134,6 +142,16 @@ STRATEGY_BLEND_K = _envint("STRATEGY_BLEND_K", 2)
 # it is a yardstick only and is never elected as a tradeable champion.
 BENCHMARK_TICKER = "SPY"
 BENCHMARK_NAME = "SPY_buy_hold"
+
+# live-outcome feedback: the only "self-improvement" that does not overfit.
+# once a strategy has enough scored LIVE reads in the account, its election
+# score is penalised by how far its real hit rate falls short of the healthy
+# edge. a strategy whose live results diverge from its backtest is the surest
+# sign of an overfit rule, and this down-weights it automatically.
+LIVE_FEEDBACK = os.environ.get("LIVE_FEEDBACK", "1") == "1"
+LIVE_FEEDBACK_MIN_N = _envint("LIVE_FEEDBACK_MIN_N", 40)
+LIVE_FEEDBACK_WEIGHT = _envfloat("LIVE_FEEDBACK_WEIGHT", 1.0)
+LIVE_HIT_TARGET = 0.3333 + 0.05   # random baseline plus the healthy edge
 
 # ---- portfolio limits shared by backtest and execution --------------------
 MAX_OPEN_POSITIONS = _envint("MAX_OPEN_POSITIONS", 5)
