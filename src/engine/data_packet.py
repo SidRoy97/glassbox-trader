@@ -30,7 +30,7 @@ def get_strategy_signal(ticker, news_items=None):
     # strategy's vote alongside it and the market regime that gates them all
     from core.config import STRATEGY_CASH, BARS_LOOKBACK_DAYS
     from engine.market_data import bars_for
-    from engine.strategies import get_strategy, all_signals
+    from engine.strategies import get_strategy, all_signals, blended_signal
     from engine.strategies.regime import market_regime
     from engine.strategies import news_gate
     from engine.strategy_election import get_strategy_champion
@@ -45,7 +45,7 @@ def get_strategy_signal(ticker, news_items=None):
                "reason": "no strategy earned positive utility in the last "
                          "election — sitting in cash"}
     else:
-        sig = get_strategy(champion).signal(df)
+        sig = blended_signal(champion, df)
     sig = news_gate.apply(sig, news_items or [])
     if not regime.get("risk_on") and sig["direction"] == "BUY":
         sig["regime_note"] = "risk-off regime — the gate will block BUYs"

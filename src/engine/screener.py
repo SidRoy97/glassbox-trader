@@ -34,7 +34,10 @@ def scan_universe(limit=None, bars=None):
             "for the record only")
         from core.config import STRATEGY_DEFAULT
         champion = STRATEGY_DEFAULT
-    strat = get_strategy(champion)
+    # a blended champion "a+b" ranks the universe by its first member; the
+    # blend combines at the portfolio level, not the scan level
+    scan_name = str(champion).split("+")[0]
+    strat = get_strategy(scan_name)
     if bars is None:
         tickers = [t for t, _ in load_universe(limit=limit)]
         bars = download_bars(tickers, days=BARS_LOOKBACK_DAYS)
@@ -56,11 +59,11 @@ def scan_universe(limit=None, bars=None):
                         "direction": "Up" if sig["direction"] == "BUY"
                         else "Neutral",
                         "confidence": round(float(sig["score"]), 4),
-                        "strategy": champion,
+                        "strategy": scan_name,
                         "reason": sig["reason"],
                         "score": round(directional + move + volume, 4)})
     results.sort(key=lambda r: r["score"], reverse=True)
-    log(f"screener[{champion}]: scanned {len(results)} tickers, "
+    log(f"screener[{scan_name}]: scanned {len(results)} tickers, "
         f"top: {[r['ticker'] for r in results[:5]]}")
     return results
 

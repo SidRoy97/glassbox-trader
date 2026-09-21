@@ -28,3 +28,23 @@ def all_signals(df):
             out[name] = {"direction": "unavailable", "score": 0.0,
                          "error": str(e)[:120]}
     return out
+
+
+def champion_members(champion):
+    # splitting a possibly-blended champion string "a+b" into its modules
+    return [get_strategy(n) for n in str(champion).split("+") if n]
+
+
+def blended_signal(champion, df):
+    # combining member strategies into one signal: BUY if any member buys,
+    # score is the mean of member scores, reason lists the contributing members
+    members = champion_members(champion)
+    sigs = [m.signal(df) for m in members]
+    buys = [s for s in sigs if s.get("direction") == "BUY"]
+    if not buys:
+        return {"model": champion, "direction": "NO_TRADE", "score": 0.0,
+                "reason": "no member strategy signalled BUY"}
+    score = round(sum(s["score"] for s in buys) / len(members), 4)
+    reason = "; ".join(f"{s['model']}: {s['reason']}" for s in buys)
+    return {"model": champion, "direction": "BUY", "score": score,
+            "reason": reason, "members": [s["model"] for s in buys]}

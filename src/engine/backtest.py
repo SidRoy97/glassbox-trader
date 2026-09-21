@@ -3,7 +3,8 @@
 import numpy as np
 import pandas as pd
 from core.config import (BT_RISK_AVERSION_KAPPA, BT_SPREAD_BPS, BT_IMPACT_BPS,
-                         BT_ANNUAL_DAYS, MAX_OPEN_POSITIONS)
+                         BT_ANNUAL_DAYS, MAX_OPEN_POSITIONS, BT_WF_FOLDS,
+                         BT_WF_MIN_FOLD_DAYS)
 
 
 def score_matrix(bars, strategy):
@@ -86,6 +87,44 @@ def run(bars, strategy, regime_mask=None, kappa=BT_RISK_AVERSION_KAPPA,
         "equity": equity,
         "net_returns": net,
     }
+
+
+def _utility_of(net, kappa=BT_RISK_AVERSION_KAPPA):
+    # ritter reward mean, annualised, for one return series
+    if net is None or len(net) == 0:
+        return 0.0
+    reward = net - (kappa / 2.0) * net ** 2
+    return float(reward.mean()) * BT_ANNUAL_DAYS
+
+
+def walk_forward_score(net, folds=BT_WF_FOLDS, kappa=BT_RISK_AVERSION_KAPPA):
+    # splitting the return series into contiguous out-of-sample folds and
+    # scoring each; the WORST fold utility is the robustness metric, the spread
+    # tells you how regime-dependent the strategy is. a strategy that only
+    # works in one fold shows a low worst-fold even with a high average.
+    net = net.dropna()
+    if len(net) < BT_WF_MIN_FOLD_DAYS * 2:
+        u = _utility_of(net, kappa)
+        return {"worst_fold_utility": round(u, 4),
+                "mean_fold_utility": round(u, 4),
+                "fold_spread": 0.0, "n_folds": 1}
+    size = len(net) // folds
+    utils = []
+    for i in range(folds):
+        lo = i * size
+        hi = len(net) if i == folds - 1 else (i + 1) * size
+        fold = net.iloc[lo:hi]
+        if len(fold) >= BT_WF_MIN_FOLD_DAYS:
+            utils.append(_utility_of(fold, kappa))
+    if not utils:
+        u = _utility_of(net, kappa)
+        return {"worst_fold_utility": round(u, 4),
+                "mean_fold_utility": round(u, 4),
+                "fold_spread": 0.0, "n_folds": 1}
+    return {"worst_fold_utility": round(min(utils), 4),
+            "mean_fold_utility": round(sum(utils) / len(utils), 4),
+            "fold_spread": round(max(utils) - min(utils), 4),
+            "n_folds": len(utils)}
 
 
 def summary_row(result):

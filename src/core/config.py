@@ -83,16 +83,37 @@ NEWS_CONFIRM_BONUS = 0.10
 
 # ---- backtest and strategy election (ritter 2017) -------------------------
 # kappa is ritter's risk-aversion in the reward r - (kappa/2) r^2 on daily
-# fractional returns; 10 makes a 1% day cost about half its own return
-BT_RISK_AVERSION_KAPPA = _envfloat("BT_RISK_AVERSION_KAPPA", 10.0)
+# fractional returns. set once, not tuned per backtest: kappa=4 penalizes a
+# 2% down day at roughly its own magnitude, which keeps the scorer risk-aware
+# without being so strict that cash wins every week. raising it toward 10
+# makes the system more defensive; lowering it toward 1 chases raw return.
+BT_RISK_AVERSION_KAPPA = _envfloat("BT_RISK_AVERSION_KAPPA", 4.0)
 # ritter eq 17-18 folded into basis points per unit of turnover
 BT_SPREAD_BPS = 5.0
 BT_IMPACT_BPS = 5.0
 BT_LOOKBACK_MONTHS = _envint("BT_LOOKBACK_MONTHS", 12)
 BT_MIN_EXPOSURE = 0.10        # a strategy that is almost never invested cannot win
 BT_ANNUAL_DAYS = 252
+
+# walk-forward validation: score each strategy on rolling out-of-sample folds
+# instead of one trailing window, and rank on the WORST fold's utility. this
+# rewards strategies that hold up across regimes and punishes ones that only
+# worked in one stretch — the main guard against overfitting the last year.
+BT_WALK_FORWARD = os.environ.get("BT_WALK_FORWARD", "1") == "1"
+BT_WF_FOLDS = _envint("BT_WF_FOLDS", 4)
+BT_WF_MIN_FOLD_DAYS = 40      # a fold shorter than this is not scored
+
+# election policy: when no strategy clears positive utility, fall back to the
+# least-risky one (smallest drawdown) IF its drawdown is tolerable, rather
+# than always sitting in cash. keeps the system defensive but not inert.
 STRATEGY_DEFAULT = "momentum_12_1"
-STRATEGY_CASH = "cash"        # elected when no strategy has positive utility
+STRATEGY_CASH = "cash"        # elected when even the fallback is too risky
+FALLBACK_MAX_DRAWDOWN = _envfloat("FALLBACK_MAX_DRAWDOWN", 0.15)
+
+# top-k blend: seat the best K strategies together (equal weight) instead of
+# winner-take-all, to diversify across premia and cut single-strategy variance.
+# 1 restores winner-take-all. the champion string becomes "a+b" when K>1.
+STRATEGY_BLEND_K = _envint("STRATEGY_BLEND_K", 2)
 
 # ---- portfolio limits shared by backtest and execution --------------------
 MAX_OPEN_POSITIONS = _envint("MAX_OPEN_POSITIONS", 5)
